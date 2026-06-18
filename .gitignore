@@ -10,3 +10,12 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# keep folder structure but ignore actual data
+data/raw/*
+data/processed/*
+data/chunks/*
+data/chroma/
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/chunks/.gitkeep

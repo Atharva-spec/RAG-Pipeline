@@ -15,7 +15,6 @@ __pycache__/
 data/raw/*
 data/processed/*
 data/chunks/*
-data/chroma/
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/chunks/.gitkeep

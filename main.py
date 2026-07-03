@@ -1,15 +1,13 @@
-import os
 from dotenv import load_dotenv
 
-from ingestion.document_loader import load_documents
-from ingestion.chunker import chunk_documents
-from ingestion.embedder import get_embedding_model
-from retrieval.vector_store import VectorStore
-from retrieval.retriever import retrieve_chunks
-from retrieval.reranker import rerank_chunks
-from generation.prompt_builder import build_prompt
-from generation.llm_client import get_answer
 from config.settings import TOP_K, RERANK_TOP_N
+from generation.llm_client import get_answer
+from generation.prompt_builder import build_prompt
+from ingestion.chunker import chunk_documents
+from ingestion.document_loader import load_documents
+from retrieval.reranker import rerank_chunks
+from retrieval.retriever import retrieve_chunks
+from retrieval.vector_store import add_chunks, create_index
 
 load_dotenv()
 
@@ -27,37 +25,18 @@ def ingest(data_dir: str = "data/raw"):
     chunks = chunk_documents(documents)
     print(f"Created {len(chunks)} chunk(s)")
 
-    embedding_model = get_embedding_model()
-    store = VectorStore(embedding_model)
-    store.add_chunks(chunks)
-    store.persist()
+    create_index()
+    add_chunks(chunks)
 
-    print("Ingestion complete. Vector DB saved.\n")
+    print("Ingestion complete. Chunks stored in OpenSearch.\n")
 
 
-def query(user_question: str) -> str:
-    """
-    Full query pipeline:
-    question → retrieve → rerank → prompt → LLM → answer
-    """
-    print(f"\nQuestion: {user_question}")
-    print("---")
-
-    embedding_model = get_embedding_model()
-    store = VectorStore(embedding_model)
-    store.load()
-
-    raw_chunks = retrieve_chunks(store, user_question, k=TOP_K)
-    print(f"Retrieved {len(raw_chunks)} chunk(s) from vector DB")
-
-    ranked_chunks = rerank_chunks(user_question, raw_chunks, top_n=RERANK_TOP_N)
-    print(f"Reranked down to top {len(ranked_chunks)} chunk(s)")
-
-    prompt = build_prompt(user_question, ranked_chunks)
-
+def query(question: str) -> str:
+    raw = retrieve_chunks(question, k=TOP_K)
+    ranked = rerank_chunks(question, raw, top_n=RERANK_TOP_N)
+    prompt = build_prompt(question, ranked)
     answer = get_answer(prompt)
-    print(f"\nAnswer: {answer}\n")
-
+    print(f"\nAnswer: {answer}")
     return answer
 
 
@@ -68,12 +47,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ingest",
         action="store_true",
-        help="Run document ingestion (do this first)"
+        help="Run document ingestion (do this first)",
     )
     parser.add_argument(
         "--query",
         type=str,
-        help="Ask a question against your documents"
+        help="Ask a question against your documents",
     )
     args = parser.parse_args()
 

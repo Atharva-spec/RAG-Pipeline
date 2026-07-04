@@ -18,7 +18,7 @@ CHUNK_SIZE = 300
 CHUNK_OVERLAP = 100
 
 # Retrieval
-TOP_K = 10
+TOP_K = 15
 RERANK_TOP_N = 3
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 

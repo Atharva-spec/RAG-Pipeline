@@ -44,6 +44,33 @@ Every Session - Run in This Order
 
 Open three separate terminals:
 
+Initial setup
+
+Option 1 — npm wrapper
+
+```bash
+npm install
+```
+
+This creates `venv/` and installs Python dependencies from `requirements.txt`.
+It now supports Windows and macOS/Linux, as long as Python 3 is installed and available in PATH.
+
+Option 2 — direct Python setup
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Windows direct setup:
+
+```bat
+py -3 -m venv venv
+venv\Scripts\activate
+venv\Scripts\pip install -r requirements.txt
+```
+
 Terminal 1 - Start OpenSearch
 
 bashdocker start native-rag-pipeline

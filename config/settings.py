@@ -14,20 +14,27 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384  # must match your embedding model output size
 
 # Chunking
-CHUNK_SIZE = 300
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 150
 
-# Retrieval
+# Retrieval & Search Core
 TOP_K = 15
 RERANK_TOP_N = 3
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+HYBRID_SEARCH_ENABLED = True
+RRF_K = 60  # Reciprocal Rank Fusion constant
 
-# OpenSearch
+# OpenSearch & HNSW Indexing
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "localhost")
 OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", 9200))
 OPENSEARCH_INDEX = "rag_index"
+HNSW_M = 24
+HNSW_EF_CONSTRUCTION = 128
+HNSW_EF_SEARCH = 100
+HNSW_ENGINE = "nmslib"
 
 # Paths
 DATA_RAW_DIR = "data/raw"
 DATA_PROCESSED_DIR = "data/processed"
 DATA_CHUNKS_DIR = "data/chunks"
+

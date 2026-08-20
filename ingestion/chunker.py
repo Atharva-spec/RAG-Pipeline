@@ -17,10 +17,20 @@ def chunk_documents(documents: list[dict]) -> list[dict]:
     all_chunks = []
     for doc in documents:
         splits = splitter.split_text(doc["text"])
-        chunks = [
-            {"id": f"{doc['source']}_{i}", "text": s, "source": doc["source"]}
-            for i, s in enumerate(splits)
-        ]
+        chunks = []
+        for i, s in enumerate(splits):
+            clean_s = s.strip()
+            if not clean_s:
+                continue
+            chunks.append(
+                {
+                    "id": f"{doc['source']}_{i}",
+                    "chunk_index": i,
+                    "text": clean_s,
+                    "source": doc["source"],
+                    "char_count": len(clean_s),
+                }
+            )
         _save_chunks(doc["source"], chunks)
         all_chunks.extend(chunks)
         print(f" Chunked: {doc['source']} -> {len(chunks)} chunks")

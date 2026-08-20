@@ -5,9 +5,9 @@ A fully local, end-to-end Retrieval-Augmented Generation (RAG) pipeline — no p
 ## How It Works
 
 ```
-Documents (PDF/txt) → chunk → embed → OpenSearch
-                                           ↓
-Question → embed → vector search → rerank → Ollama (llama3.2) → answer
+Documents (PDF/txt) → chunk (800 chars) → embed → OpenSearch (HNSW + BM25)
+                                                      ↓
+Question → embed → Hybrid Search (Vector + BM25 via RRF) → Cross-Encoder rerank → Ollama (llama3.2) → answer
 ```
 
 ## Prerequisites
@@ -156,51 +156,32 @@ data/raw/
 ```
 
 ### Step 2 — Run ingestion
-
 With all three services running (OpenSearch, Ollama, venv activated):
 
 ```bash
 python main.py --ingest
 ```
 
-Expected output:
-
+To wipe an existing index and perform a clean re-ingestion from scratch:
+```bash
+python main.py --rebuild
 ```
---- Starting ingestion ---
-Loaded: report.pdf (12450 chars)
-Loaded: notes.txt (3200 chars)
-Loaded 2 document(s)
-Created 48 chunk(s)
- Index 'rag_index' created with exact KNN
- 48 chunks stored in OpenSearch
-Ingestion complete. Chunks stored in OpenSearch.
-```
-
-Re-run `--ingest` whenever you add new files. **Always wipe the index first** (see below) to avoid duplicate chunks.
 
 ---
 
 ## Query
 
-Ask a question against your ingested documents:
+### Interactive Terminal Chat Mode (Recommended)
+Run interactive back-and-forth chat without reloading models:
+```bash
+python main.py --chat
+```
+*(Or simply `python main.py`)*
 
+### Single-shot Query
+Ask a one-off question directly from the terminal:
 ```bash
 python main.py --query "What are the main findings in the report?"
-```
-
-Expected output:
-
-```
-  Querying OpenSearch: 'What are the main findings in the report?'
-
-Answer: <grounded response from llama3.2>
-```
-
-More examples:
-
-```bash
-python main.py --query "Summarize the key points from notes.txt"
-python main.py --query "Who is mentioned in the documents?"
 ```
 
 ---
@@ -209,18 +190,9 @@ python main.py --query "Who is mentioned in the documents?"
 
 | Task | Steps |
 |------|-------|
-| Add a new document | Drop file into `data/raw/` → wipe index → `--ingest` |
-| Remove a document | Delete file from `data/raw/` → wipe index → `--ingest` |
-| Rebuild the full index | Wipe index → `--ingest` |
-| Change chunk settings | Edit `config/settings.py` → wipe index → `--ingest` |
-
-### Wipe the OpenSearch index
-
-```bash
-python -c "from retrieval.vector_store import delete_index; delete_index()"
-```
-
-Always wipe before re-ingesting to avoid duplicate or stale chunks.
+| Add / Remove / Modify documents | Drop/delete files in `data/raw/` → `python main.py --rebuild` |
+| Change chunk or model settings | Edit `config/settings.py` → `python main.py --rebuild` |
+| Rebuild index from scratch | `python main.py --rebuild` |
 
 ---
 
@@ -233,10 +205,16 @@ All tunables live in `config/settings.py`:
 | `LLM_MODEL` | `llama3.2` | Ollama model for generation |
 | `LLM_TEMPERATURE` | `0.0` | Response randomness |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-transformers model |
-| `CHUNK_SIZE` | `300` | Characters per chunk |
-| `CHUNK_OVERLAP` | `100` | Overlap between chunks |
-| `TOP_K` | `15` | Chunks retrieved from vector search |
+| `CHUNK_SIZE` | `800` | Characters per chunk |
+| `CHUNK_OVERLAP` | `150` | Overlap between chunks |
+| `HYBRID_SEARCH_ENABLED` | `True` | Combine Dense Vector + BM25 via RRF |
+| `RRF_K` | `60` | Reciprocal Rank Fusion constant |
+| `TOP_K` | `15` | Chunks retrieved from hybrid search |
 | `RERANK_TOP_N` | `3` | Chunks sent to the LLM after reranking |
+| `HNSW_M` | `24` | HNSW max bidirectional links per node |
+| `HNSW_EF_CONSTRUCTION`| `128` | HNSW construction search queue size |
+| `HNSW_EF_SEARCH` | `100` | HNSW query search queue size |
+
 
 After changing chunk or embedding settings, wipe the index and re-ingest.
 
@@ -253,7 +231,7 @@ RAG-pipeline/
 │   ├── processed/               # auto-written: cleaned text per document
 │   └── chunks/                  # auto-written: chunked JSON per document
 ├── ingestion/
-│   ├── document_loader.py       # PDF and txt parsing
+│   ├── document_loader.py       # unstructured multi-format parsing (PDF, DOCX, PPTX, TXT, MD, HTML)
 │   ├── chunker.py               # recursive text splitting
 │   ├── embedder.py              # sentence-transformers embeddings
 │   └── ingest_pipeline.py       # load → chunk → embed → store

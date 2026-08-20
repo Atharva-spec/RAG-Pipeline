@@ -17,6 +17,8 @@ def rerank_chunks(
     chunks: list[dict],
     top_n: int = RERANK_TOP_N,
 ) -> list[dict]:
+    if not chunks:
+        return []
     model = _get_model()
     pairs = [(query, c["text"]) for c in chunks]
     scores = model.predict(pairs)
@@ -26,3 +28,4 @@ def rerank_chunks(
 
     ranked = sorted(chunks, key=lambda x: x["rerank_score"], reverse=True)
     return ranked[:top_n]
+

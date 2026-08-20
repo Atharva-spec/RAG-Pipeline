@@ -43,7 +43,8 @@ Here is the complete chronological log of all changes made across the project's 
 
 | Capability | Initial Baseline Prototype | Current Production State |
 | :--- | :--- | :--- |
-| **Vector Search** | Exact KNN (Linear $O(N)$ scan) | **HNSW Approximate Nearest Neighbor (ANN)** graph (`nmslib`, M=24, ef=128) |
+| **Vector Search** | Exact KNN (Linear $O(N)$ scan) | **HNSW Approximate Nearest Neighbor (ANN)** graph (`faiss`, M=24, ef=128) |
+
 | **Search Paradigm** | Pure dense vector only (missed exact keywords) | **Dual-Channel Hybrid Search (Dense + BM25)** via Reciprocal Rank Fusion |
 | **Index Throughput**| Loop with `c.index(..., refresh=True)` | **Batched streaming ingestion** via `opensearchpy.helpers.bulk` |
 | **Document Parsing**| Basic `pypdf` (text-only, lost tables & layout) | **`unstructured` layout parser** (PDF, Word, PPT, MD, HTML, Tables, Lists) |

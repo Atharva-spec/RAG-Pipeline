@@ -37,7 +37,8 @@ OPENSEARCH_INDEX = "rag_index"
 HNSW_M = 24
 HNSW_EF_CONSTRUCTION = 128
 HNSW_EF_SEARCH = 100
-HNSW_ENGINE = "nmslib"
+HNSW_ENGINE = "faiss"
+
 
 # Guardrails & Safety
 GUARDRAILS_ENABLED = True

@@ -13,9 +13,15 @@ LLM_TEMPERATURE = 0.0
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384  # must match your embedding model output size
 
-# Chunking
-CHUNK_SIZE = 800
+# Chunking Engine (Vast & Multi-Strategy)
+CHUNKING_STRATEGY = os.getenv("CHUNKING_STRATEGY", "hierarchical")  # "hierarchical", "semantic_section", "recursive"
+PARENT_CHUNK_SIZE = 2000
+PARENT_CHUNK_OVERLAP = 200
+CHILD_CHUNK_SIZE = 400
+CHILD_CHUNK_OVERLAP = 80
+CHUNK_SIZE = 800  # Fallback for simple recursive splitter
 CHUNK_OVERLAP = 150
+
 
 # Retrieval & Search Core
 TOP_K = 15

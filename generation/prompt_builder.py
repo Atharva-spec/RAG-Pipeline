@@ -23,14 +23,31 @@ def build_prompt(
     retrieved document context, chat history, and the user question.
     """
     context_parts = []
+    seen_parents = set()
+
     for i, chunk in enumerate(chunks, 1):
         source = chunk.get("source", "Unknown")
         chunk_id = chunk.get("chunk_id", f"chunk_{i}")
+        parent_id = chunk.get("parent_id")
+        parent_text = chunk.get("parent_text")
+
+        # Deduplicate parent context blocks
+        if parent_id and parent_text:
+            if parent_id in seen_parents:
+                continue
+            seen_parents.add(parent_id)
+            context_text = parent_text
+        elif parent_text:
+            context_text = parent_text
+        else:
+            context_text = chunk.get("text", "")
+
         context_parts.append(
-            f'[{i}] Source: {source} (ID: {chunk_id})\n{chunk["text"]}'
+            f'[{len(context_parts) + 1}] Source: {source} (ID: {chunk_id})\n{context_text}'
         )
 
     context_block = "\n\n".join(context_parts) if context_parts else "No relevant context found."
+
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 

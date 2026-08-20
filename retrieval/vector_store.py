@@ -60,8 +60,14 @@ def create_index():
                     "type": "text",
                     "analyzer": "standard",
                 },
+                "parent_text": {
+                    "type": "text",
+                    "analyzer": "standard",
+                },
                 "source": {"type": "keyword"},
                 "chunk_id": {"type": "keyword"},
+                "parent_id": {"type": "keyword"},
+                "strategy": {"type": "keyword"},
                 "chunk_index": {"type": "integer"},
                 "vector": {
                     "type": "knn_vector",
@@ -104,7 +110,10 @@ def add_chunks(chunks: list[dict], batch_size: int = 200):
                 "chunk_id": chunk["id"],
                 "chunk_index": chunk.get("chunk_index", 0),
                 "text": chunk["text"],
+                "parent_id": chunk.get("parent_id"),
+                "parent_text": chunk.get("parent_text", chunk["text"]),
                 "source": chunk["source"],
+                "strategy": chunk.get("strategy", "hierarchical"),
                 "vector": vector,
             },
         }
@@ -131,7 +140,7 @@ def vector_search(query: str, k: int = TOP_K) -> list[dict]:
                 }
             }
         },
-        "_source": ["text", "source", "chunk_id", "chunk_index"],
+        "_source": ["text", "parent_text", "parent_id", "source", "chunk_id", "chunk_index", "strategy"],
     }
 
     res = c.search(index=OPENSEARCH_INDEX, body=body)
@@ -139,7 +148,10 @@ def vector_search(query: str, k: int = TOP_K) -> list[dict]:
         {
             "chunk_id": h["_source"].get("chunk_id", h["_id"]),
             "text": h["_source"]["text"],
+            "parent_id": h["_source"].get("parent_id"),
+            "parent_text": h["_source"].get("parent_text", h["_source"]["text"]),
             "source": h["_source"]["source"],
+            "strategy": h["_source"].get("strategy", "hierarchical"),
             "score": round(float(h["_score"]), 4),
             "method": "vector",
         }
@@ -160,7 +172,7 @@ def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
                 }
             }
         },
-        "_source": ["text", "source", "chunk_id", "chunk_index"],
+        "_source": ["text", "parent_text", "parent_id", "source", "chunk_id", "chunk_index", "strategy"],
     }
 
     res = c.search(index=OPENSEARCH_INDEX, body=body)
@@ -168,12 +180,16 @@ def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
         {
             "chunk_id": h["_source"].get("chunk_id", h["_id"]),
             "text": h["_source"]["text"],
+            "parent_id": h["_source"].get("parent_id"),
+            "parent_text": h["_source"].get("parent_text", h["_source"]["text"]),
             "source": h["_source"]["source"],
+            "strategy": h["_source"].get("strategy", "hierarchical"),
             "score": round(float(h["_score"]), 4),
             "method": "bm25",
         }
         for h in res["hits"]["hits"]
     ]
+
 
 
 def hybrid_search(query: str, k: int = TOP_K, rrf_k: int = RRF_K) -> list[dict]:

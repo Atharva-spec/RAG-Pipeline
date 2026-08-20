@@ -39,7 +39,7 @@ class TestChunker(unittest.TestCase):
                 "text": "Paragraph one.\n\nParagraph two with some more detailed content that will be chunked.",
             }
         ]
-        chunks = chunk_documents(docs)
+        chunks = chunk_documents(docs, strategy="recursive")
         self.assertGreater(len(chunks), 0)
         first = chunks[0]
         self.assertIn("id", first)
@@ -49,6 +49,32 @@ class TestChunker(unittest.TestCase):
         self.assertEqual(first["source"], "sample.txt")
         self.assertEqual(first["chunk_index"], 0)
         self.assertEqual(first["char_count"], len(first["text"]))
+
+    def test_chunk_hierarchical_parent_child(self):
+        docs = [
+            {
+                "source": "manual.pdf",
+                "text": "A" * 600 + "\n\n" + "B" * 600,
+            }
+        ]
+        chunks = chunk_documents(docs, strategy="hierarchical")
+        self.assertGreater(len(chunks), 0)
+        first = chunks[0]
+        self.assertIn("parent_id", first)
+        self.assertIn("parent_text", first)
+        self.assertEqual(first["strategy"], "hierarchical")
+        self.assertGreaterEqual(len(first["parent_text"]), len(first["text"]))
+
+    def test_chunk_semantic_sections(self):
+        docs = [
+            {
+                "source": "report.md",
+                "text": "# Introduction\nThis is the intro.\n\n# Methods\nThis is the methods section.",
+            }
+        ]
+        chunks = chunk_documents(docs, strategy="semantic_section")
+        self.assertGreater(len(chunks), 0)
+        self.assertEqual(chunks[0]["strategy"], "semantic_section")
 
 
 class TestPromptBuilder(unittest.TestCase):
@@ -66,6 +92,31 @@ class TestPromptBuilder(unittest.TestCase):
         self.assertIn("Context:", messages[1]["content"])
         self.assertIn("[1] Source: rag_intro.pdf", messages[1]["content"])
         self.assertIn("Question: What is RAG?", messages[1]["content"])
+
+    def test_build_prompt_parent_text_deduplication(self):
+        question = "Explain skills"
+        # Two child chunks sharing the same parent_id and parent_text
+        chunks = [
+            {
+                "source": "lecture.pdf",
+                "chunk_id": "c1",
+                "text": "Technical skill snippet",
+                "parent_id": "p1",
+                "parent_text": "Full Paragraph explaining Technical, Human, and Conceptual skills.",
+            },
+            {
+                "source": "lecture.pdf",
+                "chunk_id": "c2",
+                "text": "Human skill snippet",
+                "parent_id": "p1",
+                "parent_text": "Full Paragraph explaining Technical, Human, and Conceptual skills.",
+            },
+        ]
+        messages = build_prompt(question, chunks)
+        user_content = messages[1]["content"]
+        # The parent text should appear only once despite two child matches
+        self.assertEqual(user_content.count("Full Paragraph explaining"), 1)
+
 
 
 from generation.guardrails import (

@@ -33,8 +33,14 @@ HNSW_EF_CONSTRUCTION = 128
 HNSW_EF_SEARCH = 100
 HNSW_ENGINE = "nmslib"
 
+# Guardrails & Safety
+GUARDRAILS_ENABLED = True
+GUARDRAIL_CONFIDENCE_THRESHOLD = 0.20  # Minimum normalized confidence score (0.0 to 1.0)
+GUARDRAIL_BLOCK_PROMPT_INJECTION = True
+
 # Paths
 DATA_RAW_DIR = "data/raw"
 DATA_PROCESSED_DIR = "data/processed"
 DATA_CHUNKS_DIR = "data/chunks"
+
 

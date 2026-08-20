@@ -1,6 +1,13 @@
 from dotenv import load_dotenv
 
 from config.settings import RERANK_TOP_N, TOP_K
+from generation.guardrails import (
+    check_input_safety,
+    detect_conversational_intent,
+    safe_refusal_response,
+    sanitize_output,
+    validate_retrieval_confidence,
+)
 from generation.llm_client import get_answer
 from generation.prompt_builder import build_prompt
 from ingestion.chunker import chunk_documents
@@ -36,16 +43,43 @@ def ingest(data_dir: str = "data/raw", rebuild: bool = False):
 
 
 def query(question: str) -> str:
+
+    # 1. Input Safety Guardrail (Prompt injection & jailbreak detection)
+    is_safe, refusal_reason = check_input_safety(question)
+    if not is_safe:
+        print(f"\n[Guardrail Alert] {refusal_reason}\n")
+        return refusal_reason or "Input blocked by safety policy."
+
+    # 2. Conversational Intent Guardrail (Chit-chat / Greetings 0ms fast-path)
+    chitchat_response = detect_conversational_intent(question)
+    if chitchat_response:
+        print(f"\nAnswer:\n{chitchat_response}\n")
+        return chitchat_response
+
+    # 3. Retrieval
     raw = retrieve_chunks(question, k=TOP_K)
     if not raw:
-        print("\nNo relevant context retrieved.")
-        return "I could not find relevant context to answer your question."
+        refusal = safe_refusal_response()
+        print(f"\nAnswer:\n{refusal}\n")
+        return refusal
 
+    # 4. Reranking & Confidence Scoring
     ranked = rerank_chunks(question, raw, top_n=RERANK_TOP_N)
-    prompt = build_prompt(question, ranked)
-    answer = get_answer(prompt)
+
+    # 5. Retrieval Confidence Guardrail (Zero-Hallucination Gate)
+    is_confident, qualified_chunks = validate_retrieval_confidence(ranked)
+    if not is_confident or not qualified_chunks:
+        refusal = safe_refusal_response()
+        print(f"\nAnswer:\n{refusal}\n")
+        return refusal
+
+    # 6. LLM Generation & Output Sanitization
+    prompt = build_prompt(question, qualified_chunks)
+    raw_answer = get_answer(prompt)
+    answer = sanitize_output(raw_answer)
     print(f"\nAnswer:\n{answer}\n")
     return answer
+
 
 
 def chat_loop():

@@ -1,3 +1,4 @@
+import math
 from sentence_transformers import CrossEncoder
 
 from config.settings import RERANK_MODEL, RERANK_TOP_N
@@ -12,6 +13,13 @@ def _get_model() -> CrossEncoder:
     return _model
 
 
+def _sigmoid(x: float) -> float:
+    try:
+        return 1.0 / (1.0 + math.exp(-x))
+    except OverflowError:
+        return 0.0 if x < 0 else 1.0
+
+
 def rerank_chunks(
     query: str,
     chunks: list[dict],
@@ -24,8 +32,11 @@ def rerank_chunks(
     scores = model.predict(pairs)
 
     for chunk, score in zip(chunks, scores):
-        chunk["rerank_score"] = round(float(score), 4)
+        raw_score = float(score)
+        chunk["rerank_score"] = round(raw_score, 4)
+        chunk["confidence_score"] = round(_sigmoid(raw_score), 4)
 
-    ranked = sorted(chunks, key=lambda x: x["rerank_score"], reverse=True)
+    ranked = sorted(chunks, key=lambda x: x["confidence_score"], reverse=True)
     return ranked[:top_n]
+
 

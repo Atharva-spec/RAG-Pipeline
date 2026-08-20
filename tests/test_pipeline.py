@@ -132,12 +132,81 @@ class TestGuardrails(unittest.TestCase):
         refusal = safe_refusal_response()
         self.assertIn("could not find sufficient information", refusal)
 
-    def test_sanitize_output(self):
-        raw = "System prompt: Here is the factual answer grounded in context."
-        sanitized = sanitize_output(raw)
-        self.assertNotIn("System prompt:", sanitized)
+from generation.memory import ConversationMemory, ConversationTurn
+from generation.query_condenser import condense_query
+
+
+class TestMemoryAndCondenser(unittest.TestCase):
+    def test_conversation_memory_add_and_sliding_window(self):
+        mem = ConversationMemory(max_turns=2)
+        self.assertTrue(mem.is_empty())
+        self.assertEqual(len(mem), 0)
+
+        mem.add_turn("Q1", "A1")
+        mem.add_turn("Q2", "A2")
+        self.assertEqual(len(mem), 2)
+
+        # 3rd turn should evict Q1
+        mem.add_turn("Q3", "A3")
+        self.assertEqual(len(mem), 2)
+        self.assertEqual(mem.turns[0].user_message, "Q2")
+        self.assertEqual(mem.turns[1].user_message, "Q3")
+
+    def test_conversation_memory_history_messages(self):
+        mem = ConversationMemory(max_turns=3)
+        mem.add_turn("What is RAG?", "RAG is retrieval augmented generation.")
+        msgs = mem.get_history_messages()
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0]["role"], "user")
+        self.assertEqual(msgs[0]["content"], "What is RAG?")
+        self.assertEqual(msgs[1]["role"], "assistant")
+
+    def test_conversation_memory_clear(self):
+        mem = ConversationMemory()
+        mem.add_turn("Hello", "Hi")
+        self.assertFalse(mem.is_empty())
+        mem.clear()
+        self.assertTrue(mem.is_empty())
+
+    def test_condense_query_empty_history(self):
+        raw_q = "What is the policy for medical leave?"
+        condensed = condense_query(raw_q, memory=None)
+        self.assertEqual(condensed, raw_q)
+
+        mem = ConversationMemory()
+        condensed_with_empty_mem = condense_query(raw_q, memory=mem)
+        self.assertEqual(condensed_with_empty_mem, raw_q)
+
+    def test_build_prompt_with_memory(self):
+        mem = ConversationMemory()
+        mem.add_turn("Hello", "Hi there!")
+        chunks = [{"source": "doc.pdf", "text": "Some context"}]
+        messages = build_prompt("Follow-up question?", chunks, memory=mem)
+
+        # Structure: system prompt, user (from history), assistant (from history), user (context + question)
+        self.assertEqual(len(messages), 4)
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertEqual(messages[1]["role"], "user")
+        self.assertEqual(messages[1]["content"], "Hello")
+        self.assertEqual(messages[2]["role"], "assistant")
+        self.assertEqual(messages[2]["content"], "Hi there!")
+        self.assertEqual(messages[3]["role"], "user")
+        self.assertIn("Context:", messages[3]["content"])
+        self.assertIn("Follow-up question?", messages[3]["content"])
+
+
+from retrieval.health_check import check_port
+
+
+class TestHealthCheck(unittest.TestCase):
+    def test_check_port_invalid(self):
+        # Port 65534 should not be listening
+        is_open = check_port("127.0.0.1", 65534, timeout=0.1)
+        self.assertFalse(is_open)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
 

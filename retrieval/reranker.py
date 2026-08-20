@@ -1,6 +1,14 @@
 import math
-from sentence_transformers import CrossEncoder
+import os
+import logging
 
+# Suppress HuggingFace / Tokenizers noisy logs
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+
+from sentence_transformers import CrossEncoder
 from config.settings import RERANK_MODEL, RERANK_TOP_N
 
 _model = None  # lazy-loaded once
@@ -29,7 +37,8 @@ def rerank_chunks(
         return []
     model = _get_model()
     pairs = [(query, c["text"]) for c in chunks]
-    scores = model.predict(pairs)
+    scores = model.predict(pairs, show_progress_bar=False)
+
 
     for chunk, score in zip(chunks, scores):
         raw_score = float(score)

@@ -9,14 +9,18 @@ from generation.guardrails import (
     validate_retrieval_confidence,
 )
 from generation.llm_client import get_answer
+from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
+from generation.query_condenser import condense_query
 from ingestion.chunker import chunk_documents
 from ingestion.document_loader import load_documents
+from retrieval.health_check import run_preflight_check
 from retrieval.reranker import rerank_chunks
 from retrieval.retriever import retrieve_chunks
 from retrieval.vector_store import add_chunks, create_index, delete_index
 
 load_dotenv()
+
 
 
 def ingest(data_dir: str = "data/raw", rebuild: bool = False):
@@ -42,8 +46,11 @@ def ingest(data_dir: str = "data/raw", rebuild: bool = False):
     print("Ingestion complete. Chunks stored in OpenSearch.\n")
 
 
-def query(question: str) -> str:
+def query(
 
+    question: str,
+    memory: ConversationMemory | None = None,
+) -> str:
     # 1. Input Safety Guardrail (Prompt injection & jailbreak detection)
     is_safe, refusal_reason = check_input_safety(question)
     if not is_safe:
@@ -53,58 +60,86 @@ def query(question: str) -> str:
     # 2. Conversational Intent Guardrail (Chit-chat / Greetings 0ms fast-path)
     chitchat_response = detect_conversational_intent(question)
     if chitchat_response:
+        if memory is not None:
+            memory.add_turn(question, chitchat_response)
         print(f"\nAnswer:\n{chitchat_response}\n")
         return chitchat_response
 
-    # 3. Retrieval
-    raw = retrieve_chunks(question, k=TOP_K)
+    # 3. Query Condensation (Resolves pronouns and follow-up context)
+    search_query = condense_query(question, memory=memory)
+
+    # 4. Retrieval (executed on the condensed standalone query)
+    raw = retrieve_chunks(search_query, k=TOP_K)
     if not raw:
         refusal = safe_refusal_response()
+        if memory is not None:
+            memory.add_turn(question, refusal)
         print(f"\nAnswer:\n{refusal}\n")
         return refusal
 
-    # 4. Reranking & Confidence Scoring
-    ranked = rerank_chunks(question, raw, top_n=RERANK_TOP_N)
+    # 5. Reranking & Confidence Scoring
+    ranked = rerank_chunks(search_query, raw, top_n=RERANK_TOP_N)
 
-    # 5. Retrieval Confidence Guardrail (Zero-Hallucination Gate)
+    # 6. Retrieval Confidence Guardrail (Zero-Hallucination Gate)
     is_confident, qualified_chunks = validate_retrieval_confidence(ranked)
     if not is_confident or not qualified_chunks:
         refusal = safe_refusal_response()
+        if memory is not None:
+            memory.add_turn(question, refusal)
         print(f"\nAnswer:\n{refusal}\n")
         return refusal
 
-    # 6. LLM Generation & Output Sanitization
-    prompt = build_prompt(question, qualified_chunks)
+    # 7. LLM Generation & Output Sanitization
+    prompt = build_prompt(question, qualified_chunks, memory=memory)
     raw_answer = get_answer(prompt)
     answer = sanitize_output(raw_answer)
+
+    # 8. Record Turn in Memory
+    if memory is not None:
+        sources = list({c.get("source", "Unknown") for c in qualified_chunks})
+        memory.add_turn(question, answer, sources=sources)
+
     print(f"\nAnswer:\n{answer}\n")
     return answer
 
 
-
 def chat_loop():
     """
-    Interactive terminal chat session.
+    Interactive multi-turn terminal chat session with Conversational Memory, Health Check, and Guardrails.
     """
-    print("\n" + "=" * 50)
-    print(" Native RAG Pipeline — Interactive Terminal Chat")
-    print(" Type your question and press Enter.")
-    print(" Type 'exit' or 'quit' to end session.")
-    print("=" * 50 + "\n")
+    # 1. Run Pre-flight Health Check
+    run_preflight_check()
+
+    memory = ConversationMemory(max_turns=5)
+
+    print("\n" + "=" * 55)
+    print(" Native RAG Pipeline — Conversational Terminal Chat")
+    print(" • Type your question and press Enter.")
+    print(" • Type '/clear' to reset chat memory.")
+    print(" • Type 'exit' or 'quit' to end session.")
+    print("=" * 55 + "\n")
+
 
     while True:
         try:
             user_input = input("\nYou: ").strip()
             if not user_input:
                 continue
+
             if user_input.lower() in ("exit", "quit", "q"):
                 print("Exiting chat. Goodbye!")
                 break
 
-            query(user_input)
+            if user_input.lower() in ("/clear", "/reset", "clear"):
+                memory.clear()
+                print("  Memory cleared. Starting a fresh conversation.")
+                continue
+
+            query(user_input, memory=memory)
         except (KeyboardInterrupt, EOFError):
             print("\nSession ended.")
             break
+
 
 
 if __name__ == "__main__":

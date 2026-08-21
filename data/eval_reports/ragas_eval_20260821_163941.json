@@ -1,0 +1,74 @@
+{
+  "timestamp": "2026-08-21T11:09:41.297772+00:00",
+  "total_samples": 4,
+  "aggregate_metrics": {
+    "faithfulness": 0.9375,
+    "answer_relevance": 0.8113,
+    "context_precision": 0.8958,
+    "context_recall": 0.8864,
+    "ragas_score": 0.8827
+  },
+  "sample_evaluations": [
+    {
+      "id": "eval_01",
+      "question": "What are the three essential managerial skills according to Robert Katz?",
+      "ground_truth": "Robert Katz identified Technical Skills, Human or Interpersonal Skills, and Conceptual Skills as the three essential managerial skills.",
+      "answer": "According to Robert Katz, the three essential managerial skills are:\n\n1. Technical Skills (The \"Hardware\"): Proficiency in specific methods, processes, or techniques.\n2. Human/Interpersonal Skills (The \"Interface\"): The ability to work with, understand, and motivate people, both individually and in groups.\n3. Conceptual Skills (The \"Operating System\"): The ability to see the organization as a whole, recognizing how various functions depend on one another and how changes in one part affect the rest.\n\nThese skills are represented by the Robert Katz Model, which is applicable for IT professionals, including engineers.\n\n\ud83d\udcda Sources & Citations:\n  [1] Lecture 3 (Notes & QB).pdf (Confidence: 99%)\n      \"Concept: Technical, Human, and Conceptual Skills. \uf0b7 Answer: Robert Katz identified three essential managerial skills:\"\n  [2] Lecture 3 (Notes & QB).pdf (Confidence: 99%)\n      \"A manager's primary tool is no longer the IDE (Integrated Development Environment); it is the Team. 2. The Robert Katz Model: Three Essential Skills Robert K...\"\n  [3] Lecture 3 (Notes & QB).pdf (Confidence: 99%)\n      \"Lecture 3: The Engineering-to- Management Bridge (Module1 from Syllabus) Types of Managerial Skills (Robert Katz Model) 1. Concept: The Managerial \"Identity ...\"",
+      "retrieved_sources": [
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf"
+      ],
+      "faithfulness": 1.0,
+      "answer_relevance": 0.8187,
+      "context_precision": 1.0,
+      "context_recall": 0.9091,
+      "ragas_score": 0.9319,
+      "guardrail_status": "ANSWERED"
+    },
+    {
+      "id": "eval_02",
+      "question": "What does First-Order Logic (FOL) represent and what are its key components?",
+      "ground_truth": "First-Order Logic (FOL) represents facts, relations, and properties of world entities using constants, variables, predicates, and quantifiers (Universal and Existential).",
+      "answer": "According to the provided context [1], First-Order Logic (FOL) represents facts, relations, and properties of world entities using constants, variables, predicates, and quantifiers (Universal \u2200 and Existential \u2203).\n\nThe key components of FOL include:\n\n* Constants: Represent specific entities, such as Bluebird in statement ii).\n* Variables: Bind to specific entities, such as x in statements iii and v).\n* Predicates: Represent properties or relations, such as Horse(x), Cow(x), Pig(x), Read(x), Literate(x), Tree(t), AquaticBird(b), Lake(l), SleepsIn(b, t), Beside(t, l), Person(p), Eats(p, x), KilledBy(p, x).\n* Quantifiers:\n\t+ Universal quantifier (\u2200): Binds a variable to all entities in the domain.\n\t+ Existential quantifier (\u2203): Binds a variable to at least one entity in the domain.\n\nThese components work together to express statements and relationships in FOL.\n\n\ud83d\udcda Sources & Citations:\n  [1] aisc-sol.pdf (Confidence: 99%)\n      \"c) Write FOL for the following statements: [5 Marks] First-Order Logic (Predicate Logic) represents facts, relations, and properties of world entities using ...\"",
+      "retrieved_sources": [
+        "aisc-sol.pdf",
+        "aisc-sol.pdf"
+      ],
+      "faithfulness": 0.75,
+      "answer_relevance": 0.716,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "ragas_score": 0.8665,
+      "guardrail_status": "ANSWERED"
+    },
+    {
+      "id": "eval_03",
+      "question": "Which managerial skill is most critical for top executives?",
+      "ground_truth": "Conceptual skills are the most critical for top-level executives because they need to see the organization as a whole.",
+      "answer": "According to [2], the \"Human Constant\" within the Katz Model states that Human Skills (Interface) remain stable across management levels. However, the question asks which managerial skill is most critical for top executives.\n\nAt the Top Level (CTO/CEO), Conceptual Skills are most critical for long-term strategic planning and identifying a long-term market opportunity [2].\n\n\ud83d\udcda Sources & Citations:\n  [2] Lecture 3 (Notes & QB).pdf (Confidence: 94%)\n      \"Application: Most vital at the Top Level (CTO/CEO) for long-term strategic planning. Identify which skill is being used in these scenarios: Scenario A: Negot...\"",
+      "retrieved_sources": [
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf"
+      ],
+      "faithfulness": 1.0,
+      "answer_relevance": 0.7606,
+      "context_precision": 0.5833,
+      "context_recall": 0.6364,
+      "ragas_score": 0.7451,
+      "guardrail_status": "ANSWERED"
+    },
+    {
+      "id": "eval_04",
+      "question": "What is the capital of France and what is its current weather?",
+      "answer": "I could not find sufficient information in your uploaded documents to answer that question accurately. Please make sure the relevant document is uploaded or try refining your question.",
+      "faithfulness": 1.0,
+      "answer_relevance": 0.95,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "ragas_score": 0.9875,
+      "guardrail_status": "SAFE_REFUSAL"
+    }
+  ]
+}

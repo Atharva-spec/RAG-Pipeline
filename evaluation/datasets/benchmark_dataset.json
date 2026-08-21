@@ -1,0 +1,32 @@
+[
+  {
+    "id": "eval_01",
+    "question": "What are the three essential managerial skills according to Robert Katz?",
+    "ground_truth": "Robert Katz identified Technical Skills, Human or Interpersonal Skills, and Conceptual Skills as the three essential managerial skills.",
+    "expected_sources": [
+      "Lecture 3 (Notes & QB).pdf"
+    ]
+  },
+  {
+    "id": "eval_02",
+    "question": "What does First-Order Logic (FOL) represent and what are its key components?",
+    "ground_truth": "First-Order Logic (FOL) represents facts, relations, and properties of world entities using constants, variables, predicates, and quantifiers (Universal and Existential).",
+    "expected_sources": [
+      "aisc-sol.pdf"
+    ]
+  },
+  {
+    "id": "eval_03",
+    "question": "Which managerial skill is most critical for top executives?",
+    "ground_truth": "Conceptual skills are the most critical for top-level executives because they need to see the organization as a whole.",
+    "expected_sources": [
+      "Lecture 3 (Notes & QB).pdf"
+    ]
+  },
+  {
+    "id": "eval_04",
+    "question": "What is the capital of France and what is its current weather?",
+    "ground_truth": "I don't have enough information in the provided documents to answer that.",
+    "expected_sources": []
+  }
+]

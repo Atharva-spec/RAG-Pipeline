@@ -154,10 +154,23 @@ ollama serve
 ### Step 3: Start Interactive Chat
 
 Run the interactive conversational terminal chat:
+
+#### Smart Incremental Ingestion:
+Scans `data/raw/` with SHA-256 hash diffing. Skips unchanged files in **<50ms**, updates modified files, and purges deleted documents:
 ```bash
-python main.py --chat
+python main.py --ingest
 ```
-*(Or simply `python main.py`)*
+
+#### Live Background File Watcher (Hands-Free):
+Monitors `data/raw/` in real time. The second you drag & drop a PDF, Word doc, or presentation, it auto-indexes it in the background:
+```bash
+python main.py --watch
+```
+
+#### Rebuild from Scratch:
+```bash
+python main.py --rebuild
+```
 
 #### Interactive Chat Commands:
 * `Type your question`: Asks questions with conversational memory and query condensation.
@@ -168,6 +181,14 @@ python main.py --chat
 ```bash
 python main.py --query "What are the managerial skills from Lecture 3?"
 ```
+
+#### RAGAS Benchmark Evaluation Suite:
+Run quantitative local evaluation across Faithfulness, Relevance, Precision, and Recall:
+```bash
+python main.py --evaluate
+```
+*(Or `python -m evaluation.run_eval`)*
+
 
 ---
 
@@ -264,16 +285,3 @@ RAG-pipeline/
 * Start the background Ollama server: `ollama serve`
 
 **`Pre-Flight Check: OpenSearch is OFFLINE`**
-* Start the Docker container: `docker start native-rag-pipeline`
-
-**`Address already in use (port 11434)`**
-* A background Ollama instance is already running. Stop the service first: `brew services stop ollama && ollama serve`
-
-**`Index mapping updated / Stale results`**
-* Rebuild the HNSW index cleanly from scratch: `python main.py --rebuild`
-
----
-
-## Author
-
-Atharva — [GitHub](https://github.com/atharva)

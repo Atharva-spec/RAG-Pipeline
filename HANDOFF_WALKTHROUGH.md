@@ -196,10 +196,14 @@ RAG-pipeline/
 | **7. Vast Multi-Strategy Chunking** | Hierarchical Parent-Child chunking (2,000c parents / 400c child snippets) and parent context deduplication. |
 | **8. Normalization & Deduplication**| Unicode NFKC cleaner, hyphenation un-breaker, SHA-256 chunk deduplication, and rich OpenSearch metadata schema. |
 | **9. Verifiable Citations**| Bracketed citation extraction, source resolver, and `📚 Sources & Citations` footer. |
+| **10. Local RAGAS Evaluation**| Quantitative benchmarking across Faithfulness, Relevance, Precision, and Recall with automated scorecards. |
+| **11. Smart Incremental Sync & Watcher**| Hash-differential sync (skips unchanged in <50ms) and live folder watcher (`--watch`). |
 
 ---
 
 ## 6. System Configuration Reference
+
+
 
 
 All settings live in [`config/settings.py`](file:///Users/atharva/RAG-pipeline/config/settings.py):
@@ -295,5 +299,3 @@ python main.py --chat
 python main.py --query "What is First-Order Logic (FOL)?"
 
 # 6. Run Automated Test Suite
-python -m unittest discover -s tests -v
-```

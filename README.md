@@ -72,62 +72,55 @@ Drop in PDFs, Word docs, PPTs, or Notes ──► Chat grounded in your document
 
 ## Prerequisites
 
-| Tool | Purpose | Installation |
+| Tool | Purpose | Windows / macOS / Linux Setup |
 | :--- | :--- | :--- |
-| **Python 3.10+** | Pipeline runtime | [python.org](https://www.python.org/) / Homebrew |
-| **Docker** | OpenSearch Vector Store | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
-| **Ollama** | Local LLM Engine | `brew install ollama` or [ollama.com](https://ollama.com/download) |
+| **Node.js 18+** | Universal installer & runner | [nodejs.org](https://nodejs.org/) (runs `npm i` and CLI shortcuts) |
+| **Python 3.10+** | Pipeline runtime | [python.org](https://www.python.org/) / `brew` / `apt` |
+| **Docker** | OpenSearch Vector Store | [docker.com](https://www.docker.com/products/docker-desktop/) (`docker compose`) |
+| **Ollama** | Local LLM Engine | [ollama.com](https://ollama.com/download) / `brew install ollama` |
 
 ---
 
-## One-Time Setup
+## ⚡ 1-Minute Quick Start (Windows, macOS & Linux)
 
-### 1. Clone Repository & Setup Environment
+### 1. Clone & Install Dependencies
+Run a single command — `npm install` automatically creates your Python virtual environment and installs all cross-platform requirements:
 ```bash
+git clone https://github.com/Atharva-spec/RAG-Pipeline.git
 cd RAG-pipeline
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+
+npm install
 ```
 
-### 2. Configure Environment Variables
-Create a `.env` file in the root directory (or use defaults):
-```env
-OLLAMA_BASE_URL=http://localhost:11434
-OPENSEARCH_HOST=localhost
-OPENSEARCH_PORT=9200
-```
-
-### 3. Pull Local LLM Model
+### 2. Turn on Docker & Ollama
 ```bash
+# 1. Start OpenSearch container (via Docker Compose)
+docker compose up -d
+
+# 2. Pull local LLM & start Ollama
 ollama pull llama3.2
+ollama serve
 ```
 
-### 4. Create OpenSearch Container (First Time Only)
+### 3. Launch the Pipeline!
 ```bash
-docker run -d \
-  --name native-rag-pipeline \
-  -p 9200:9200 \
-  -p 9600:9600 \
-  -e "discovery.type=single-node" \
-  -e "DISABLE_INSTALL_DEMO_CONFIG=true" \
-  -e "plugins.security.disabled=true" \
-  -e "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" \
-  opensearchproject/opensearch:latest
+npm start
 ```
+*(Or use `./rag --chat` on macOS/Linux or `rag.bat --chat` on Windows)*
 
 ---
 
-## Daily Operating Guide
+## ⚙️ Daily Operating Guide
 
 ### Step 1: Start Background Services
-Open your terminal and ensure both background services are running:
+Ensure OpenSearch and Ollama are running:
 
 ```bash
 # Start OpenSearch Vector Store
-docker start native-rag-pipeline
+docker compose up -d
+# (Or: docker start native-rag-pipeline)
 
-# Start Ollama LLM (in a separate terminal or background)
+# Start Ollama LLM
 ollama serve
 ```
 

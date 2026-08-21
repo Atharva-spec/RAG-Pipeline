@@ -1,21 +1,22 @@
 # ⚡ Enterprise RAG Pipeline — CLI Commands & Operations Guide
 
-A complete, copy-pasteable reference cheat sheet for all commands, flags, background services, evaluation suites, and interactive shortcuts in the RAG pipeline.
+A complete, copy-pasteable reference cheat sheet for all commands, flags, background services, evaluation suites, and interactive shortcuts in the RAG pipeline across **Windows, macOS, and Linux**.
 
 ---
 
-## 🚀 Quick Reference Card
+## 🚀 Quick Reference Card (Universal)
 
-| Goal | Command | Description |
-| :--- | :--- | :--- |
-| **Start Chat** | `./rag --chat` | Interactive multi-turn conversational session with memory |
-| **Hands-Free Watcher** | `./rag --watch` | Auto-indexes new documents the second you drop them in `data/raw/` |
-| **Single Question** | `./rag --query "<text>"` | Fast one-off answer with verified citations & sources |
-| **Incremental Sync** | `./rag --ingest` | Scans disk & skips unchanged files in **<50ms** |
-| **Rebuild Index** | `./rag --rebuild` | Wipes OpenSearch index and re-ingests everything from scratch |
-| **RAGAS Evaluation** | `./rag --evaluate` | 100% local benchmarking (Faithfulness, Relevance, Precision, Recall) |
-| **Calibrate Threshold** | `./rag --calibrate` | Automated precision-recall threshold sweep for zero hallucination |
-| **Run Unit Tests** | `python -m unittest discover -s tests -v` | Executes all 35 automated unit tests |
+| Goal | Universal (npm) | macOS / Linux | Windows (CMD / PowerShell) |
+| :--- | :--- | :--- | :--- |
+| **Start Chat** | `npm start` *(or `npm run chat`)* | `./rag --chat` | `rag.bat --chat` *(or `.\rag.ps1 --chat`)* |
+| **Hands-Free Watcher** | `npm run watch` | `./rag --watch` | `rag.bat --watch` |
+| **Single Question** | `npm run query -- "<text>"` | `./rag --query "<text>"` | `rag.bat --query "<text>"` |
+| **Incremental Sync** | `npm run ingest` | `./rag --ingest` | `rag.bat --ingest` |
+| **Rebuild Index** | `npm run rebuild` | `./rag --rebuild` | `rag.bat --rebuild` |
+| **RAGAS Evaluation** | `npm run eval` | `./rag --evaluate` | `rag.bat --evaluate` |
+| **Calibrate Threshold** | `npm run calibrate` | `./rag --calibrate` | `rag.bat --calibrate` |
+| **Run Unit Tests** | `npm test` | `npm test` | `npm test` |
+| **Start OpenSearch** | `npm run docker:up` | `docker compose up -d` | `docker compose up -d` |
 
 ---
 
@@ -24,8 +25,9 @@ A complete, copy-pasteable reference cheat sheet for all commands, flags, backgr
 Ensure Docker and Ollama are running before querying:
 
 ```bash
-# 1. Start OpenSearch Container
-docker start native-rag-pipeline
+# 1. Start OpenSearch Container (via Docker Compose)
+docker compose up -d
+# (Or: docker start native-rag-pipeline)
 
 # 2. Start Local Ollama LLM
 ollama serve

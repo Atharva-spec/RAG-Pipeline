@@ -1,8 +1,22 @@
 {
   "name": "rag-pipeline",
+  "version": "1.0.0",
   "private": true,
-  "description": "Convenience wrapper for Python dependency setup in this repo",
+  "description": "Enterprise Native RAG Pipeline with Hybrid Search, Guardrails, and Citations",
   "scripts": {
-    "postinstall": "node scripts/setup-python-env.js"
+    "postinstall": "node scripts/setup-python-env.js",
+    "setup": "node scripts/setup-python-env.js",
+    "start": "node scripts/run.js --chat",
+    "chat": "node scripts/run.js --chat",
+    "query": "node scripts/run.js --query",
+    "ingest": "node scripts/run.js --ingest",
+    "rebuild": "node scripts/run.js --rebuild",
+    "watch": "node scripts/run.js --watch",
+    "eval": "node scripts/run.js --evaluate",
+    "calibrate": "node scripts/run.js --calibrate",
+    "test": "node scripts/run.js test",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:start": "docker start native-rag-pipeline"
   }
 }

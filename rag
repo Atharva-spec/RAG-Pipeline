@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Direct launcher for RAG Pipeline - automatically uses venv
+# Direct cross-platform launcher for RAG Pipeline on macOS and Linux
+# Automatically locates Python inside virtualenv
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_EXEC="$SCRIPT_DIR/venv/bin/python"
 
-if [ ! -f "$PYTHON_EXEC" ]; then
-    echo "❌ Error: Virtual environment not found at $PYTHON_EXEC"
-    echo "Run 'python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt' first."
+if [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON_EXEC="$SCRIPT_DIR/venv/bin/python"
+elif [ -f "$SCRIPT_DIR/venv/bin/python3" ]; then
+    PYTHON_EXEC="$SCRIPT_DIR/venv/bin/python3"
+elif [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
+    PYTHON_EXEC="$SCRIPT_DIR/venv/Scripts/python.exe"
+else
+    echo "❌ Error: Virtual environment not found."
+    echo "👉 Run 'npm install' or 'python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt' first."
     exit 1
 fi
 

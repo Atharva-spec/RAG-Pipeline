@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 
 from config.settings import RERANK_TOP_N, TOP_K
+from generation.citation_resolver import resolve_citations
 from generation.guardrails import (
     check_input_safety,
     detect_conversational_intent,
@@ -20,6 +21,7 @@ from retrieval.retriever import retrieve_chunks
 from retrieval.vector_store import add_chunks, create_index, delete_index
 
 load_dotenv()
+
 
 
 
@@ -94,13 +96,18 @@ def query(
     raw_answer = get_answer(prompt)
     answer = sanitize_output(raw_answer)
 
-    # 8. Record Turn in Memory
-    if memory is not None:
-        sources = list({c.get("source", "Unknown") for c in qualified_chunks})
-        memory.add_turn(question, answer, sources=sources)
+    # 8. Verifiable Citation Resolution & Footer Attachment
+    citations, citations_footer = resolve_citations(answer, qualified_chunks)
+    full_output = f"{answer}{citations_footer}"
 
-    print(f"\nAnswer:\n{answer}\n")
-    return answer
+    # 9. Record Turn in Memory
+    if memory is not None:
+        source_names = [c["source"] for c in citations] if citations else [c.get("source", "Unknown") for c in qualified_chunks]
+        memory.add_turn(question, full_output, sources=source_names)
+
+    print(f"\nAnswer:\n{full_output}\n")
+    return full_output
+
 
 
 def chat_loop():

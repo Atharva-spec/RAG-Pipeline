@@ -1,18 +1,37 @@
 import unittest
-from ingestion.document_loader import _clean
+from ingestion.normalizer import normalize_text, compute_content_hash
 from ingestion.chunker import chunk_documents
 from generation.prompt_builder import build_prompt, SYSTEM_PROMPT
 from retrieval.reranker import rerank_chunks
 from retrieval.vector_store import hybrid_search
 
 
-class TestDocumentLoader(unittest.TestCase):
-    def test_text_cleaning(self):
-        raw_text = "Hello    world!\n\n\n\nThis is   a test.\t\tFine."
-        cleaned = _clean(raw_text)
-        self.assertEqual(cleaned, "Hello world!\n\nThis is a test. Fine.")
-        self.assertNotIn("\n\n\n", cleaned)
 
+class TestNormalizer(unittest.TestCase):
+    def test_unicode_normalization_quotes_dashes(self):
+        raw = "\u201cHello\u201d \u2018world\u2019 \u2014 test\u00a0value"
+        clean = normalize_text(raw)
+        self.assertEqual(clean, '"Hello" \'world\' - test value')
+
+    def test_hyphenation_repair(self):
+        raw = "This is a manage-\n  ment principle and auto-\n  mation tool."
+        clean = normalize_text(raw)
+        self.assertIn("management", clean)
+        self.assertIn("automation", clean)
+
+    def test_whitespace_and_page_number_cleaning(self):
+        raw = "Heading\n\n\n\nPage 1 of 5\n\nSome   content.\n12\n\nMore text."
+        clean = normalize_text(raw)
+        self.assertNotIn("Page 1 of 5", clean)
+        self.assertEqual(clean, "Heading\n\nSome content.\n\nMore text.")
+
+    def test_content_hash_deterministic(self):
+        text1 = "Hello World!"
+        text2 = "  hello   world!  "
+        self.assertEqual(compute_content_hash(text1), compute_content_hash(text2))
+
+
+class TestDocumentLoader(unittest.TestCase):
     def test_unstructured_parser_with_text_file(self):
         import tempfile
         from pathlib import Path
@@ -30,12 +49,13 @@ class TestDocumentLoader(unittest.TestCase):
             temp_path.unlink(missing_ok=True)
 
 
-
 class TestChunker(unittest.TestCase):
     def test_chunking_with_metadata(self):
         docs = [
             {
                 "source": "sample.txt",
+                "doc_id": "sample_123",
+                "doc_hash": "a1b2c3d4",
                 "text": "Paragraph one.\n\nParagraph two with some more detailed content that will be chunked.",
             }
         ]
@@ -43,12 +63,35 @@ class TestChunker(unittest.TestCase):
         self.assertGreater(len(chunks), 0)
         first = chunks[0]
         self.assertIn("id", first)
+        self.assertIn("doc_id", first)
+        self.assertIn("doc_hash", first)
+        self.assertIn("content_hash", first)
         self.assertIn("chunk_index", first)
+        self.assertIn("total_chunks", first)
         self.assertIn("char_count", first)
+        self.assertIn("word_count", first)
         self.assertIn("text", first)
         self.assertEqual(first["source"], "sample.txt")
         self.assertEqual(first["chunk_index"], 0)
         self.assertEqual(first["char_count"], len(first["text"]))
+        self.assertEqual(first["word_count"], len(first["text"].split()))
+
+    def test_chunk_level_deduplication(self):
+        # Two documents with identical repeated boilerplate text
+        docs = [
+            {
+                "source": "doc1.txt",
+                "text": "Unique intro.\n\nRepeated standard confidentiality notice across all docs.",
+            },
+            {
+                "source": "doc2.txt",
+                "text": "Different content.\n\nRepeated standard confidentiality notice across all docs.",
+            },
+        ]
+        chunks = chunk_documents(docs, strategy="recursive", deduplicate=True)
+        # Check that the repeated notice chunk only appears once in the chunk list
+        content_hashes = [c["content_hash"] for c in chunks]
+        self.assertEqual(len(content_hashes), len(set(content_hashes)))
 
     def test_chunk_hierarchical_parent_child(self):
         docs = [
@@ -75,6 +118,7 @@ class TestChunker(unittest.TestCase):
         chunks = chunk_documents(docs, strategy="semantic_section")
         self.assertGreater(len(chunks), 0)
         self.assertEqual(chunks[0]["strategy"], "semantic_section")
+
 
 
 class TestPromptBuilder(unittest.TestCase):
@@ -247,6 +291,7 @@ class TestMemoryAndCondenser(unittest.TestCase):
 
 
 from retrieval.health_check import check_port
+from generation.citation_resolver import extract_cited_indices, resolve_citations, format_citations_footer
 
 
 class TestHealthCheck(unittest.TestCase):
@@ -256,8 +301,37 @@ class TestHealthCheck(unittest.TestCase):
         self.assertFalse(is_open)
 
 
+class TestCitationResolver(unittest.TestCase):
+    def test_extract_cited_indices(self):
+        answer = "First-Order Logic uses constants [1] and predicates [2]. It also uses quantifiers [1, 2]."
+        indices = extract_cited_indices(answer, max_index=3)
+        self.assertEqual(indices, [1, 2])
+
+    def test_resolve_citations_and_footer(self):
+        answer = "Robert Katz identifies technical and human skills [1]."
+        chunks = [
+            {
+                "source": "Lecture 3.pdf",
+                "section_header": "MANAGERIAL SKILLS",
+                "chunk_id": "c1",
+                "doc_hash": "a1b2c3d4e5f6",
+                "confidence_score": 0.95,
+                "text": "Technical skills involve proficiency in specific methods and tools.",
+            }
+        ]
+        citations, footer = resolve_citations(answer, chunks)
+        self.assertEqual(len(citations), 1)
+        self.assertEqual(citations[0]["source"], "Lecture 3.pdf")
+        self.assertEqual(citations[0]["section_header"], "MANAGERIAL SKILLS")
+        self.assertEqual(citations[0]["confidence_display"], "95%")
+        self.assertIn("📚 Sources & Citations:", footer)
+        self.assertIn("Lecture 3.pdf", footer)
+        self.assertIn("Confidence: 95%", footer)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

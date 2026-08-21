@@ -4,12 +4,12 @@ from generation.memory import ConversationMemory
 SYSTEM_PROMPT = (
     "You are a helpful, enterprise-grade AI assistant. Answer the user question accurately "
     "using ONLY the provided document context below.\n\n"
-    "Guidelines:\n"
+    "Mandatory Guidelines:\n"
     "1. Ground your answer strictly in the provided Context chunks.\n"
-    "2. If the context does not contain enough information to answer the question, clearly state: "
+    "2. Citation Requirements: Every factual statement or claim MUST be followed by the bracketed number of the context passage it came from, e.g. [1], [2], or [1, 2]. Do not state facts without citations.\n"
+    "3. If the context does not contain enough information to answer the question, clearly state: "
     '"I don\'t have enough information in the provided documents to answer that."\n'
-    "3. Maintain a natural, professional tone. When relevant, cite the source document names (e.g. [Source: filename.pdf]).\n"
-    "4. Do not speculate or invent facts."
+    "4. Maintain a professional, concise tone. Do not speculate or invent facts."
 )
 
 
@@ -25,9 +25,11 @@ def build_prompt(
     context_parts = []
     seen_parents = set()
 
-    for i, chunk in enumerate(chunks, 1):
+    for chunk in chunks:
         source = chunk.get("source", "Unknown")
-        chunk_id = chunk.get("chunk_id", f"chunk_{i}")
+        section = chunk.get("section_header")
+        section_str = f" | Section: {section}" if section and section != "General" else ""
+        chunk_id = chunk.get("chunk_id", f"chunk_{len(context_parts) + 1}")
         parent_id = chunk.get("parent_id")
         parent_text = chunk.get("parent_text")
 
@@ -42,11 +44,13 @@ def build_prompt(
         else:
             context_text = chunk.get("text", "")
 
+        idx = len(context_parts) + 1
         context_parts.append(
-            f'[{len(context_parts) + 1}] Source: {source} (ID: {chunk_id})\n{context_text}'
+            f'[{idx}] Source: {source}{section_str} (ID: {chunk_id})\n{context_text}'
         )
 
     context_block = "\n\n".join(context_parts) if context_parts else "No relevant context found."
+
 
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]

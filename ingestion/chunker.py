@@ -1,7 +1,7 @@
 import json
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -15,6 +15,7 @@ from config.settings import (
     PARENT_CHUNK_OVERLAP,
     PARENT_CHUNK_SIZE,
 )
+from ingestion.normalizer import compute_content_hash, normalize_text
 
 
 def chunk_hierarchical(
@@ -23,11 +24,13 @@ def chunk_hierarchical(
     parent_overlap: int = PARENT_CHUNK_OVERLAP,
     child_size: int = CHILD_CHUNK_SIZE,
     child_overlap: int = CHILD_CHUNK_OVERLAP,
+    deduplicate: bool = True,
 ) -> List[dict]:
     """
-    Hierarchical (Parent-Child) Chunking:
-    - Creates large parent context blocks (for LLM generation).
-    - Splits each parent block into small child snippets (for high-precision vector search).
+    Hierarchical (Parent-Child) Chunking with content deduplication and rich metadata:
+    - Large parent context blocks (for LLM context).
+    - Small child snippets (for vector search).
+    - Deduplicates identical repeated chunks.
     """
     parent_splitter = RecursiveCharacterTextSplitter(
         chunk_size=parent_size,
@@ -42,17 +45,24 @@ def chunk_hierarchical(
     )
 
     all_chunks = []
+    seen_content_hashes: Set[str] = set()
+    skipped_duplicates = 0
 
     for doc in documents:
         doc_source = doc["source"]
         doc_text = doc["text"]
+        doc_id = doc.get("doc_id", doc_source)
+        doc_hash = doc.get("doc_hash", "")
+        file_type = doc.get("file_type", Path(doc_source).suffix.lower())
+        file_size = doc.get("file_size_bytes", 0)
+        last_modified = doc.get("last_modified", "")
 
         parent_splits = parent_splitter.split_text(doc_text)
         doc_chunks = []
         global_idx = 0
 
         for p_idx, parent_text in enumerate(parent_splits):
-            clean_parent = parent_text.strip()
+            clean_parent = normalize_text(parent_text)
             if not clean_parent:
                 continue
 
@@ -60,28 +70,52 @@ def chunk_hierarchical(
             child_splits = child_splitter.split_text(clean_parent)
 
             for c_idx, child_text in enumerate(child_splits):
-                clean_child = child_text.strip()
+                clean_child = normalize_text(child_text)
                 if not clean_child:
                     continue
+
+                content_hash = compute_content_hash(clean_child)
+
+                # Deduplication filter
+                if deduplicate:
+                    if content_hash in seen_content_hashes:
+                        skipped_duplicates += 1
+                        continue
+                    seen_content_hashes.add(content_hash)
 
                 chunk_id = f"{doc_source}_p{p_idx}_c{c_idx}"
                 doc_chunks.append(
                     {
                         "id": chunk_id,
+                        "doc_id": doc_id,
+                        "doc_hash": doc_hash,
                         "chunk_index": global_idx,
-                        "text": clean_child,  # Vector index search target
+                        "total_chunks": 0,  # updated below
+                        "text": clean_child,
+                        "content_hash": content_hash,
                         "parent_id": parent_id,
-                        "parent_text": clean_parent,  # LLM context target
+                        "parent_text": clean_parent,
                         "source": doc_source,
+                        "file_type": file_type,
+                        "file_size_bytes": file_size,
+                        "last_modified": last_modified,
                         "strategy": "hierarchical",
                         "char_count": len(clean_child),
+                        "word_count": len(clean_child.split()),
                     }
                 )
                 global_idx += 1
 
+        # Populate total_chunks
+        for ch in doc_chunks:
+            ch["total_chunks"] = len(doc_chunks)
+
         _save_chunks(doc_source, doc_chunks)
         all_chunks.extend(doc_chunks)
-        print(f"  [Hierarchical Chunking] {doc_source} ──► {len(parent_splits)} parents, {len(doc_chunks)} child chunks")
+        print(f"  [Hierarchical Chunking] {doc_source} ──► {len(parent_splits)} parents, {len(doc_chunks)} unique child chunks")
+
+    if skipped_duplicates > 0:
+        print(f"  [Deduplication] Filtered out {skipped_duplicates} duplicate chunk(s)")
 
     return all_chunks
 
@@ -90,11 +124,10 @@ def chunk_semantic_sections(
     documents: List[dict],
     max_chunk_size: int = CHUNK_SIZE,
     overlap: int = CHUNK_OVERLAP,
+    deduplicate: bool = True,
 ) -> List[dict]:
     """
-    Structural / Section-Aware Chunking:
-    - Splits document on Markdown headers (#, ##, ###) and major section titles.
-    - Preserves headings and contextual boundaries.
+    Structural / Section-Aware Chunking with metadata & deduplication.
     """
     sub_splitter = RecursiveCharacterTextSplitter(
         chunk_size=max_chunk_size,
@@ -104,12 +137,18 @@ def chunk_semantic_sections(
 
     header_pattern = r"(?m)^(#{1,6}\s+.+|[A-Z0-9\s]{4,}:|\bModule\s+\d+\b|\bLecture\s+\d+\b)"
     all_chunks = []
+    seen_content_hashes: Set[str] = set()
+    skipped_duplicates = 0
 
     for doc in documents:
         doc_source = doc["source"]
         doc_text = doc["text"]
+        doc_id = doc.get("doc_id", doc_source)
+        doc_hash = doc.get("doc_hash", "")
+        file_type = doc.get("file_type", Path(doc_source).suffix.lower())
+        file_size = doc.get("file_size_bytes", 0)
+        last_modified = doc.get("last_modified", "")
 
-        # Split on section headings
         raw_sections = re.split(header_pattern, doc_text)
         sections = []
         current_header = "General"
@@ -135,48 +174,86 @@ def chunk_semantic_sections(
 
         for section_header, section_content in sections:
             full_section_text = f"{section_header}\n{section_content}".strip() if section_header != "General" else section_content
-            if not full_section_text:
+            clean_section = normalize_text(full_section_text)
+            if not clean_section:
                 continue
 
-            if len(full_section_text) <= max_chunk_size:
+            if len(clean_section) <= max_chunk_size:
+                content_hash = compute_content_hash(clean_section)
+                if deduplicate:
+                    if content_hash in seen_content_hashes:
+                        skipped_duplicates += 1
+                        continue
+                    seen_content_hashes.add(content_hash)
+
                 doc_chunks.append(
                     {
                         "id": f"{doc_source}_{global_idx}",
+                        "doc_id": doc_id,
+                        "doc_hash": doc_hash,
                         "chunk_index": global_idx,
-                        "text": full_section_text,
+                        "total_chunks": 0,
+                        "text": clean_section,
+                        "content_hash": content_hash,
                         "parent_id": None,
-                        "parent_text": full_section_text,
+                        "parent_text": clean_section,
                         "section_header": section_header,
                         "source": doc_source,
+                        "file_type": file_type,
+                        "file_size_bytes": file_size,
+                        "last_modified": last_modified,
                         "strategy": "semantic_section",
-                        "char_count": len(full_section_text),
+                        "char_count": len(clean_section),
+                        "word_count": len(clean_section.split()),
                     }
                 )
                 global_idx += 1
             else:
-                sub_splits = sub_splitter.split_text(full_section_text)
+                sub_splits = sub_splitter.split_text(clean_section)
                 for s in sub_splits:
-                    clean_s = s.strip()
+                    clean_s = normalize_text(s)
                     if not clean_s:
                         continue
+
+                    content_hash = compute_content_hash(clean_s)
+                    if deduplicate:
+                        if content_hash in seen_content_hashes:
+                            skipped_duplicates += 1
+                            continue
+                        seen_content_hashes.add(content_hash)
+
                     doc_chunks.append(
                         {
                             "id": f"{doc_source}_{global_idx}",
+                            "doc_id": doc_id,
+                            "doc_hash": doc_hash,
                             "chunk_index": global_idx,
+                            "total_chunks": 0,
                             "text": clean_s,
+                            "content_hash": content_hash,
                             "parent_id": None,
-                            "parent_text": full_section_text,
+                            "parent_text": clean_section,
                             "section_header": section_header,
                             "source": doc_source,
+                            "file_type": file_type,
+                            "file_size_bytes": file_size,
+                            "last_modified": last_modified,
                             "strategy": "semantic_section",
                             "char_count": len(clean_s),
+                            "word_count": len(clean_s.split()),
                         }
                     )
                     global_idx += 1
 
+        for ch in doc_chunks:
+            ch["total_chunks"] = len(doc_chunks)
+
         _save_chunks(doc_source, doc_chunks)
         all_chunks.extend(doc_chunks)
         print(f"  [Semantic Section Chunking] {doc_source} ──► {len(doc_chunks)} chunks")
+
+    if skipped_duplicates > 0:
+        print(f"  [Deduplication] Filtered out {skipped_duplicates} duplicate chunk(s)")
 
     return all_chunks
 
@@ -185,9 +262,10 @@ def chunk_recursive(
     documents: List[dict],
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
+    deduplicate: bool = True,
 ) -> List[dict]:
     """
-    Standard recursive character splitter.
+    Standard recursive character splitter with deduplication and metadata.
     """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -195,32 +273,62 @@ def chunk_recursive(
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     all_chunks = []
+    seen_content_hashes: Set[str] = set()
+    skipped_duplicates = 0
 
     for doc in documents:
         doc_source = doc["source"]
+        doc_id = doc.get("doc_id", doc_source)
+        doc_hash = doc.get("doc_hash", "")
+        file_type = doc.get("file_type", Path(doc_source).suffix.lower())
+        file_size = doc.get("file_size_bytes", 0)
+        last_modified = doc.get("last_modified", "")
+
         splits = splitter.split_text(doc["text"])
         doc_chunks = []
 
         for i, s in enumerate(splits):
-            clean_s = s.strip()
+            clean_s = normalize_text(s)
             if not clean_s:
                 continue
+
+            content_hash = compute_content_hash(clean_s)
+            if deduplicate:
+                if content_hash in seen_content_hashes:
+                    skipped_duplicates += 1
+                    continue
+                seen_content_hashes.add(content_hash)
+
             doc_chunks.append(
                 {
                     "id": f"{doc_source}_{i}",
+                    "doc_id": doc_id,
+                    "doc_hash": doc_hash,
                     "chunk_index": i,
+                    "total_chunks": 0,
                     "text": clean_s,
+                    "content_hash": content_hash,
                     "parent_id": None,
                     "parent_text": clean_s,
                     "source": doc_source,
+                    "file_type": file_type,
+                    "file_size_bytes": file_size,
+                    "last_modified": last_modified,
                     "strategy": "recursive",
                     "char_count": len(clean_s),
+                    "word_count": len(clean_s.split()),
                 }
             )
+
+        for ch in doc_chunks:
+            ch["total_chunks"] = len(doc_chunks)
 
         _save_chunks(doc_source, doc_chunks)
         all_chunks.extend(doc_chunks)
         print(f"  [Recursive Chunking] {doc_source} ──► {len(doc_chunks)} chunks")
+
+    if skipped_duplicates > 0:
+        print(f"  [Deduplication] Filtered out {skipped_duplicates} duplicate chunk(s)")
 
     return all_chunks
 
@@ -228,19 +336,21 @@ def chunk_recursive(
 def chunk_documents(
     documents: List[dict],
     strategy: Optional[str] = None,
+    deduplicate: bool = True,
 ) -> List[dict]:
     """
-    Primary chunking dispatcher supporting 'hierarchical', 'semantic_section', and 'recursive'.
+    Primary chunking dispatcher supporting 'hierarchical', 'semantic_section', and 'recursive'
+    with chunk-level deduplication and metadata enrichment.
     """
     Path(DATA_CHUNKS_DIR).mkdir(parents=True, exist_ok=True)
     selected_strategy = (strategy or CHUNKING_STRATEGY).lower()
 
     if selected_strategy == "hierarchical":
-        return chunk_hierarchical(documents)
+        return chunk_hierarchical(documents, deduplicate=deduplicate)
     elif selected_strategy in ("semantic_section", "structural"):
-        return chunk_semantic_sections(documents)
+        return chunk_semantic_sections(documents, deduplicate=deduplicate)
     else:
-        return chunk_recursive(documents)
+        return chunk_recursive(documents, deduplicate=deduplicate)
 
 
 def _save_chunks(source: str, chunks: List[dict]):

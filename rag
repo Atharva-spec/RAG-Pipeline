@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Direct launcher for RAG Pipeline - automatically uses venv
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_EXEC="$SCRIPT_DIR/venv/bin/python"
+
+if [ ! -f "$PYTHON_EXEC" ]; then
+    echo "❌ Error: Virtual environment not found at $PYTHON_EXEC"
+    echo "Run 'python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt' first."
+    exit 1
+fi
+
+exec "$PYTHON_EXEC" "$SCRIPT_DIR/main.py" "$@"

@@ -80,15 +80,17 @@ def validate_retrieval_confidence(
 
     # Filter chunks that meet the minimum confidence threshold
     confident_chunks = [
-        c for c in ranked_chunks if c.get("confidence_score", 1.0) >= threshold
+        c for c in ranked_chunks
+        if c.get("confidence_score", c.get("score", 0.0)) >= threshold
     ]
 
     if not confident_chunks:
-        top_score = ranked_chunks[0].get("confidence_score", 0.0) if ranked_chunks else 0.0
+        top_score = ranked_chunks[0].get("confidence_score", ranked_chunks[0].get("score", 0.0)) if ranked_chunks else 0.0
         print(f"  [Guardrail] Refused: Top confidence ({top_score:.3f}) below threshold ({threshold:.3f})")
         return False, []
 
     return True, confident_chunks
+
 
 
 def safe_refusal_response() -> str:

@@ -198,10 +198,12 @@ RAG-pipeline/
 | **9. Verifiable Citations**| Bracketed citation extraction, source resolver, and `📚 Sources & Citations` footer. |
 | **10. Local RAGAS Evaluation**| Quantitative benchmarking across Faithfulness, Relevance, Precision, and Recall with automated scorecards. |
 | **11. Smart Incremental Sync & Watcher**| Hash-differential sync (skips unchanged in <50ms) and live folder watcher (`--watch`). |
+| **12. Confidence Calibration Engine**| Automated threshold sweep across precision/recall curves for zero hallucination. |
 
 ---
 
 ## 6. System Configuration Reference
+
 
 
 

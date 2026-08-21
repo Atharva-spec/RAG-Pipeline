@@ -187,7 +187,13 @@ Run quantitative local evaluation across Faithfulness, Relevance, Precision, and
 ```bash
 python main.py --evaluate
 ```
-*(Or `python -m evaluation.run_eval`)*
+
+#### Confidence Threshold Calibration:
+Sweep cross-encoder confidence thresholds to find optimal zero-hallucination settings:
+```bash
+python main.py --calibrate
+```
+
 
 
 ---

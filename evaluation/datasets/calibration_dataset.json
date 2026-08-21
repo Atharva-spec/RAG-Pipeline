@@ -1,0 +1,42 @@
+[
+  {
+    "query": "What are the three essential managerial skills according to Robert Katz?",
+    "is_in_domain": true
+  },
+  {
+    "query": "Explain technical skills versus human and interpersonal skills for managers.",
+    "is_in_domain": true
+  },
+  {
+    "query": "What does First-Order Logic represent and what are its components?",
+    "is_in_domain": true
+  },
+  {
+    "query": "What is the engineering to management transition in Lecture 3?",
+    "is_in_domain": true
+  },
+  {
+    "query": "How do conceptual skills help top-level management view the organization?",
+    "is_in_domain": true
+  },
+  {
+    "query": "What is the recipe for baking a chocolate cake?",
+    "is_in_domain": false
+  },
+  {
+    "query": "Who won the FIFA World Cup in 2022 and who scored the final goal?",
+    "is_in_domain": false
+  },
+  {
+    "query": "Explain the biological process of photosynthesis in green plants.",
+    "is_in_domain": false
+  },
+  {
+    "query": "What is the capital of Australia and what is its population?",
+    "is_in_domain": false
+  },
+  {
+    "query": "How does quantum gravity unify general relativity with quantum mechanics?",
+    "is_in_domain": false
+  }
+]

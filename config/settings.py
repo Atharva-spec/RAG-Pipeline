@@ -1,15 +1,31 @@
+import logging
 import os
+import warnings
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Global HuggingFace Hub / Tokenizers quiet configuration
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
+warnings.filterwarnings("ignore", module="huggingface_hub")
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 # LLM
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 LLM_MODEL = "llama3.2"
 LLM_TEMPERATURE = 0.0
 
-# Embeddings
+# Embeddings & HuggingFace
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+if HF_TOKEN:
+    os.environ["HF_TOKEN"] = HF_TOKEN
+    os.environ["HUGGINGFACE_HUB_TOKEN"] = HF_TOKEN
+
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384  # must match your embedding model output size
 

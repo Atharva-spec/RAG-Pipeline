@@ -7,6 +7,7 @@ from generation.guardrails import (
     detect_conversational_intent,
     safe_refusal_response,
     sanitize_output,
+    validate_output_safety,
     validate_retrieval_confidence,
 )
 from generation.llm_client import get_answer
@@ -92,10 +93,12 @@ def query(
         print(f"\nAnswer:\n{refusal}\n")
         return refusal
 
-    # 7. LLM Generation & Output Sanitization
+    # 7. LLM Generation & Output Guardrail
     prompt = build_prompt(question, qualified_chunks, memory=memory)
     raw_answer = get_answer(prompt)
-    answer = sanitize_output(raw_answer)
+    is_safe_output, answer, alert_msg = validate_output_safety(raw_answer)
+    if not is_safe_output and alert_msg:
+        print(f"\n[Output Guardrail Alert] {alert_msg}")
 
     # 8. Verifiable Citation Resolution & Footer Attachment
     citations, citations_footer = resolve_citations(answer, qualified_chunks)

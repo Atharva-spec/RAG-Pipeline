@@ -1,9 +1,19 @@
 import os
 import socket
-import urllib.request
-import ollama
-from opensearchpy import OpenSearch
-from config.settings import OPENSEARCH_HOST, OPENSEARCH_PORT, OLLAMA_BASE_URL, LLM_MODEL
+from typing import Tuple
+
+from config.settings import (
+    DATABASE_URL,
+    GROQ_API_KEY,
+    GROQ_MODEL,
+    LLM_BACKEND,
+    LLM_MODEL,
+    OLLAMA_BASE_URL,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    POSTGRES_TABLE,
+)
 
 
 def check_port(host: str, port: int, timeout: float = 1.0) -> bool:
@@ -14,36 +24,42 @@ def check_port(host: str, port: int, timeout: float = 1.0) -> bool:
         return False
 
 
-def check_opensearch() -> tuple[bool, str]:
-    if not check_port(OPENSEARCH_HOST, OPENSEARCH_PORT):
-        return False, f"Port {OPENSEARCH_PORT} unreachable. Run: docker start native-rag-pipeline"
+def check_postgres() -> Tuple[bool, str]:
+    if not check_port(POSTGRES_HOST, POSTGRES_PORT):
+        return False, f"Port {POSTGRES_PORT} unreachable. Run: npm run docker:up (or docker start rag-postgres)"
     try:
-        client = OpenSearch(
-            hosts=[{"host": OPENSEARCH_HOST, "port": OPENSEARCH_PORT}],
-            use_ssl=False,
-            timeout=2,
-        )
-        if client.ping():
-            return True, f"Connected to OpenSearch at {OPENSEARCH_HOST}:{OPENSEARCH_PORT}"
-        return False, "OpenSearch did not respond to ping"
+        from retrieval.vector_store import get_connection
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+                return True, f"Connected to PostgreSQL ({POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB})"
     except Exception as e:
-        return False, f"OpenSearch connection error: {e}"
+        return False, f"PostgreSQL connection error: {e}"
 
 
-def check_ollama() -> tuple[bool, str]:
-    try:
-        response = ollama.list()
-        models = [m.model for m in response.models] if hasattr(response, "models") else []
-        model_names = [str(m).split(":")[0] for m in models]
-        
-        target_base = LLM_MODEL.split(":")[0]
-        has_model = any(target_base in name for name in model_names)
-        
-        if has_model:
-            return True, f"Connected to Ollama (Model '{LLM_MODEL}' ready)"
-        return True, f"Connected to Ollama (Note: model '{LLM_MODEL}' may need 'ollama pull {LLM_MODEL}')"
-    except Exception as e:
-        return False, f"Ollama unreachable ({e}). Run: ollama serve"
+def check_llm() -> Tuple[bool, str]:
+    backend = LLM_BACKEND.lower()
+    if backend == "groq":
+        if not GROQ_API_KEY:
+            return False, "GROQ_API_KEY is not set in .env"
+        try:
+            from generation.llm_client import _get_groq_client
+
+            client = _get_groq_client()
+            if client:
+                return True, f"Groq Cloud API Online (Model: '{GROQ_MODEL}')"
+            return False, "Failed to initialize Groq client"
+        except Exception as e:
+            return False, f"Groq API error ({e})"
+    else:
+        try:
+            import ollama
+
+            response = ollama.list()
+            return True, f"Connected to Ollama (Model '{LLM_MODEL}')"
+        except Exception as e:
+            return False, f"Ollama unreachable ({e}). Run: ollama serve"
 
 
 def run_preflight_check() -> bool:
@@ -51,28 +67,31 @@ def run_preflight_check() -> bool:
     Runs quick health check on background services and prints a clean status table.
     Returns True if all critical services are healthy, False otherwise.
     """
-    os_ok, os_msg = check_opensearch()
-    ollama_ok, ollama_msg = check_ollama()
+    pg_ok, pg_msg = check_postgres()
+    llm_ok, llm_msg = check_llm()
 
-    all_healthy = os_ok and ollama_ok
+    all_healthy = pg_ok and llm_ok
 
     print("\n" + "=" * 60)
     print(" 🔍 System Pre-Flight Health Check")
     print("=" * 60)
-    
-    # OpenSearch status
-    if os_ok:
-        print(f"  [✓] OpenSearch (Vector Store): ONLINE ({OPENSEARCH_HOST}:{OPENSEARCH_PORT})")
-    else:
-        print(f"  [✗] OpenSearch (Vector Store): OFFLINE")
-        print(f"      👉 Fix: Run 'docker start native-rag-pipeline'")
 
-    # Ollama status
-    if ollama_ok:
-        print(f"  [✓] Ollama (LLM Engine):       ONLINE ({ollama_msg})")
+    # PostgreSQL status
+    if pg_ok:
+        print(f"  [✓] PostgreSQL (pgvector Store): ONLINE ({POSTGRES_HOST}:{POSTGRES_PORT})")
     else:
-        print(f"  [✗] Ollama (LLM Engine):       OFFLINE")
-        print(f"      👉 Fix: Open a terminal and run 'ollama serve'")
+        print(f"  [✗] PostgreSQL (pgvector Store): OFFLINE")
+        print(f"      👉 Fix: Run 'npm run docker:up'")
+
+    # LLM status
+    if llm_ok:
+        print(f"  [✓] LLM Engine ({LLM_BACKEND.upper()}):         ONLINE ({llm_msg})")
+    else:
+        print(f"  [✗] LLM Engine ({LLM_BACKEND.upper()}):         OFFLINE")
+        if LLM_BACKEND.lower() == "groq":
+            print(f"      👉 Fix: Check GROQ_API_KEY in .env")
+        else:
+            print(f"      👉 Fix: Run 'ollama serve'")
 
     print("=" * 60)
 

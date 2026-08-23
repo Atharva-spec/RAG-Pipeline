@@ -12,6 +12,7 @@ from generation.guardrails import (
     detect_conversational_intent,
     safe_refusal_response,
     sanitize_output,
+    validate_output_safety,
     validate_retrieval_confidence,
 )
 from generation.llm_client import get_answer
@@ -229,10 +230,10 @@ def evaluate_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
             "guardrail_status": "SAFE_REFUSAL",
         }
 
-    # 4. LLM Generation
+    # 4. LLM Generation & Output Guardrail
     prompt = build_prompt(question, qualified_chunks)
     raw_answer = get_answer(prompt)
-    answer = sanitize_output(raw_answer)
+    is_safe_output, answer, alert_msg = validate_output_safety(raw_answer)
     citations, footer = resolve_citations(answer, qualified_chunks)
     full_answer = f"{answer}{footer}"
 

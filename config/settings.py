@@ -1,15 +1,39 @@
+import logging
 import os
+import warnings
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# LLM
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-LLM_MODEL = "llama3.2"
-LLM_TEMPERATURE = 0.0
+# Global HuggingFace Hub / Tokenizers quiet configuration
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
+warnings.filterwarnings("ignore", module="huggingface_hub")
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
-# Embeddings
+# LLM Backend & Dual-Engine Router
+LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama").lower()  # "ollama" or "groq"
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2")
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.0"))
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+# Query Condensation Strategy
+FAST_QUERY_CONDENSER = os.getenv("FAST_QUERY_CONDENSER", "true").lower() in ("true", "1", "yes")
+
+
+# Embeddings & HuggingFace
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+if HF_TOKEN:
+    os.environ["HF_TOKEN"] = HF_TOKEN
+    os.environ["HUGGINGFACE_HUB_TOKEN"] = HF_TOKEN
+
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384  # must match your embedding model output size
 
@@ -27,17 +51,26 @@ CHUNK_OVERLAP = 150
 TOP_K = 15
 RERANK_TOP_N = 3
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+USE_ONNX_RERANKER = os.getenv("USE_ONNX_RERANKER", "true").lower() in ("true", "1", "yes")
+ONNX_MODEL_DIR = os.getenv("ONNX_MODEL_DIR", "data/models/reranker_onnx")
 HYBRID_SEARCH_ENABLED = True
 RRF_K = 60  # Reciprocal Rank Fusion constant
 
-# OpenSearch & HNSW Indexing
-OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "localhost")
-OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", 9200))
-OPENSEARCH_INDEX = "rag_index"
-HNSW_M = 24
-HNSW_EF_CONSTRUCTION = 128
-HNSW_EF_SEARCH = 100
-HNSW_ENGINE = "faiss"
+# PostgreSQL & pgvector Database Core
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+POSTGRES_DB = os.getenv("POSTGRES_DB", "rag_db")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_TABLE = os.getenv("POSTGRES_TABLE", "document_chunks")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+)
+HNSW_M = int(os.getenv("HNSW_M", "16"))
+HNSW_EF_CONSTRUCTION = int(os.getenv("HNSW_EF_CONSTRUCTION", "64"))
+HNSW_EF_SEARCH = int(os.getenv("HNSW_EF_SEARCH", "40"))
+
 
 
 # Guardrails & Safety

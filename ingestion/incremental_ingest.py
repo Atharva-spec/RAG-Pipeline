@@ -2,48 +2,38 @@ import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from config.settings import DATA_RAW_DIR, OPENSEARCH_INDEX
+from config.settings import DATA_RAW_DIR, POSTGRES_TABLE
 from ingestion.chunker import chunk_documents
 from ingestion.document_loader import SUPPORTED_EXTENSIONS, load_documents
 from ingestion.normalizer import compute_file_hash
 from retrieval.vector_store import (
     add_chunks,
     create_index,
-    get_client,
+    get_connection,
 )
 
 
 def get_indexed_document_hashes() -> Dict[str, str]:
     """
-    Queries OpenSearch to retrieve a mapping of {source_filename: doc_hash}
+    Queries PostgreSQL to retrieve a mapping of {source_filename: doc_hash}
     for all currently indexed documents.
     """
-    c = get_client()
-    if not c.indices.exists(index=OPENSEARCH_INDEX):
-        return {}
-
-    body = {
-        "size": 0,
-        "aggs": {
-            "sources": {
-                "terms": {"field": "source", "size": 1000},
-                "aggs": {
-                    "doc_hash": {"terms": {"field": "doc_hash", "size": 1}}
-                },
-            }
-        },
-    }
-
     try:
-        res = c.search(index=OPENSEARCH_INDEX, body=body)
-        buckets = res.get("aggregations", {}).get("sources", {}).get("buckets", [])
-        mapping = {}
-        for b in buckets:
-            source = b["key"]
-            hash_buckets = b.get("doc_hash", {}).get("buckets", [])
-            doc_hash = hash_buckets[0]["key"] if hash_buckets else ""
-            mapping[source] = doc_hash
-        return mapping
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT to_regclass(%s);",
+                    (POSTGRES_TABLE,),
+                )
+                res = cur.fetchone()
+                if not res or not res.get("to_regclass"):
+                    return {}
+
+                cur.execute(
+                    f"SELECT DISTINCT ON (source) source, doc_hash FROM {POSTGRES_TABLE} WHERE source IS NOT NULL;"
+                )
+                rows = cur.fetchall()
+                return {r["source"]: (r["doc_hash"] or "") for r in rows}
     except Exception as e:
         print(f"  [Incremental Ingest Warning] Could not fetch index state: {e}")
         return {}
@@ -51,22 +41,16 @@ def get_indexed_document_hashes() -> Dict[str, str]:
 
 def delete_document_chunks(doc_source: str) -> int:
     """
-    Deletes all chunks associated with a specific document source from OpenSearch.
+    Deletes all chunks associated with a specific document source from PostgreSQL.
     """
-    c = get_client()
-    if not c.indices.exists(index=OPENSEARCH_INDEX):
-        return 0
-
-    body = {
-        "query": {
-            "term": {"source": doc_source}
-        }
-    }
-
     try:
-        res = c.delete_by_query(index=OPENSEARCH_INDEX, body=body, refresh=True)
-        deleted = res.get("deleted", 0)
-        return deleted
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"DELETE FROM {POSTGRES_TABLE} WHERE source = %s;",
+                    (doc_source,),
+                )
+                return cur.rowcount
     except Exception as e:
         print(f"  [Incremental Ingest Error] Failed to delete chunks for '{doc_source}': {e}")
         return 0

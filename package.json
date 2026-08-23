@@ -17,6 +17,6 @@
     "test": "node scripts/run.js test",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:start": "docker start native-rag-pipeline"
+    "docker:start": "docker start rag-postgres"
   }
 }

@@ -2,7 +2,7 @@
 
 ## ✅ Completed Milestones (Production Core)
 
-- [x] **Core RAG Pipeline**: Hierarchical Parent-Child Chunking, HNSW FAISS OpenSearch index, BM25 Reciprocal Rank Fusion (RRF).
+- [x] **Core RAG Pipeline**: Hierarchical Parent-Child Chunking, HNSW PostgreSQL `pgvector` index, GIN `tsvector` Full-Text Search, and Reciprocal Rank Fusion (RRF).
 - [x] **Precision Reranker**: Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) with Sigmoid confidence calibration.
 - [x] **Multi-Layer Guardrails System**:
   - [x] Layer 1 Input Guardrail (Homoglyph, Leetspeak, Base64 payload decoding, Delimiter tags).

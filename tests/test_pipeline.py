@@ -511,6 +511,28 @@ class TestHealthCheck(unittest.TestCase):
         is_open = check_port("127.0.0.1", 65534, timeout=0.1)
         self.assertFalse(is_open)
 
+    @patch("retrieval.health_check.check_port")
+    @patch("retrieval.vector_store.get_connection")
+    def test_check_postgres_online(self, mock_conn, mock_port):
+        from retrieval.health_check import check_postgres
+
+        mock_port.return_value = True
+        mock_cursor = MagicMock()
+        mock_conn.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = mock_cursor
+        is_ok, msg = check_postgres()
+        self.assertTrue(is_ok)
+        self.assertIn("Connected to PostgreSQL", msg)
+
+    @patch("retrieval.health_check.check_port")
+    def test_check_postgres_offline(self, mock_port):
+        from retrieval.health_check import check_postgres
+
+        mock_port.return_value = False
+        is_ok, msg = check_postgres()
+        self.assertFalse(is_ok)
+        self.assertIn("unreachable", msg)
+
+
 
 class TestCitationResolver(unittest.TestCase):
     def test_extract_cited_indices(self):

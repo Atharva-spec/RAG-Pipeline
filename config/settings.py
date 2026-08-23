@@ -56,14 +56,21 @@ ONNX_MODEL_DIR = os.getenv("ONNX_MODEL_DIR", "data/models/reranker_onnx")
 HYBRID_SEARCH_ENABLED = True
 RRF_K = 60  # Reciprocal Rank Fusion constant
 
-# OpenSearch & HNSW Indexing
-OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "localhost")
-OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", 9200))
-OPENSEARCH_INDEX = "rag_index"
-HNSW_M = 24
-HNSW_EF_CONSTRUCTION = 128
-HNSW_EF_SEARCH = 100
-HNSW_ENGINE = "faiss"
+# PostgreSQL & pgvector Database Core
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+POSTGRES_DB = os.getenv("POSTGRES_DB", "rag_db")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_TABLE = os.getenv("POSTGRES_TABLE", "document_chunks")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+)
+HNSW_M = int(os.getenv("HNSW_M", "16"))
+HNSW_EF_CONSTRUCTION = int(os.getenv("HNSW_EF_CONSTRUCTION", "64"))
+HNSW_EF_SEARCH = int(os.getenv("HNSW_EF_SEARCH", "40"))
+
 
 
 # Guardrails & Safety

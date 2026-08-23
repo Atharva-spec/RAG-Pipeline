@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from config.settings import GUARDRAIL_CONFIDENCE_THRESHOLD
 from evaluation.evaluator import (
@@ -20,6 +21,7 @@ from generation.guardrails import (
     validate_output_safety,
     validate_retrieval_confidence,
 )
+from generation.llm_client import get_answer
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
@@ -33,6 +35,8 @@ from ingestion.normalizer import (
 )
 from retrieval.health_check import check_port
 from retrieval.reranker import rerank_chunks
+from retrieval.vector_store import hybrid_search
+
 
 
 class TestNormalizer(unittest.TestCase):
@@ -335,6 +339,66 @@ class TestReranker(unittest.TestCase):
         res = rerank_chunks("query", [])
         self.assertEqual(res, [])
 
+    def test_reranker_scoring_and_calibration(self):
+        chunks = [
+            {"chunk_id": "c1", "source": "doc1.pdf", "text": "Retrieval-Augmented Generation improves LLM accuracy."},
+            {"chunk_id": "c2", "source": "doc2.pdf", "text": "Unrelated recipe for baking chocolate cookies with butter."},
+        ]
+        ranked = rerank_chunks("What is RAG in machine learning?", chunks, top_n=2)
+        self.assertEqual(len(ranked), 2)
+        self.assertIn("rerank_score", ranked[0])
+        self.assertIn("confidence_score", ranked[0])
+        self.assertGreaterEqual(ranked[0]["confidence_score"], 0.0)
+        self.assertLessEqual(ranked[0]["confidence_score"], 1.0)
+        # RAG chunk should be ranked first
+        self.assertIn("Retrieval-Augmented Generation", ranked[0]["text"])
+
+
+class TestDualEngineLLM(unittest.TestCase):
+    @patch("generation.llm_client._call_ollama")
+    def test_ollama_backend_default(self, mock_ollama):
+        mock_ollama.return_value = "Ollama response"
+        ans = get_answer([{"role": "user", "content": "hello"}], backend="ollama")
+        self.assertEqual(ans, "Ollama response")
+        mock_ollama.assert_called_once()
+
+    @patch("generation.llm_client._call_groq")
+    def test_groq_backend_success(self, mock_groq):
+        mock_groq.return_value = "Groq response"
+        ans = get_answer([{"role": "user", "content": "hello"}], backend="groq")
+        self.assertEqual(ans, "Groq response")
+        mock_groq.assert_called_once()
+
+    @patch("generation.llm_client._call_groq")
+    @patch("generation.llm_client._call_ollama")
+    def test_groq_backend_fallback_to_ollama(self, mock_ollama, mock_groq):
+        mock_groq.side_effect = Exception("API rate limit exceeded")
+        mock_ollama.return_value = "Fallback Ollama response"
+        ans = get_answer([{"role": "user", "content": "hello"}], backend="groq")
+        self.assertEqual(ans, "Fallback Ollama response")
+        mock_ollama.assert_called_once()
+
+
+class TestParallelHybridSearch(unittest.TestCase):
+    @patch("retrieval.vector_store.vector_search")
+    @patch("retrieval.vector_store.lexical_search")
+    def test_parallel_hybrid_search_rrf_scoring(self, mock_lexical, mock_vector):
+        mock_vector.return_value = [
+            {"chunk_id": "c1", "text": "Doc 1", "source": "doc1.pdf", "score": 0.95},
+            {"chunk_id": "c2", "text": "Doc 2", "source": "doc2.pdf", "score": 0.85},
+        ]
+        mock_lexical.return_value = [
+            {"chunk_id": "c2", "text": "Doc 2", "source": "doc2.pdf", "score": 12.5},
+            {"chunk_id": "c3", "text": "Doc 3", "source": "doc3.pdf", "score": 8.0},
+        ]
+
+        results = hybrid_search("test query", k=3, rrf_k=60)
+        self.assertEqual(len(results), 3)
+        # c2 appeared in both searches (rank 2 in vector, rank 1 in lexical), should score highest in RRF
+        self.assertEqual(results[0]["chunk_id"], "c2")
+        self.assertEqual(results[0]["method"], "hybrid_rrf")
+        self.assertIn("rrf_score", results[0])
+
 
 class TestPromptBuilder(unittest.TestCase):
     def test_build_prompt_structure(self):
@@ -382,7 +446,6 @@ class TestMemoryAndCondenser(unittest.TestCase):
         self.assertEqual(mem.turns[0].user_message, "Q2")
         self.assertEqual(mem.turns[1].user_message, "Q3")
 
-
     def test_conversation_memory_history_messages(self):
         mem = ConversationMemory(max_turns=3)
         mem.add_turn("What is RAG?", "RAG is retrieval augmented generation.")
@@ -407,6 +470,24 @@ class TestMemoryAndCondenser(unittest.TestCase):
         mem = ConversationMemory()
         condensed_with_empty_mem = condense_query(raw_q, memory=mem)
         self.assertEqual(condensed_with_empty_mem, raw_q)
+
+    def test_fast_condenser_standalone_query_bypass(self):
+        standalone_q = "Explain the architecture of transformer models in deep learning."
+        mem = ConversationMemory()
+        mem.add_turn("What is attention?", "Attention is all you need.")
+        # Standalone question without pronouns bypasses LLM
+        res = condense_query(standalone_q, memory=mem)
+        self.assertEqual(res, standalone_q)
+
+    @patch("generation.query_condenser.get_answer")
+    def test_condenser_referential_query_calls_llm(self, mock_get_answer):
+        mock_get_answer.return_value = "What are the advantages of transformer models?"
+        referential_q = "What are its main advantages?"
+        mem = ConversationMemory()
+        mem.add_turn("What is transformer?", "A neural network architecture.")
+        res = condense_query(referential_q, memory=mem)
+        self.assertEqual(res, "What are the advantages of transformer models?")
+        mock_get_answer.assert_called_once()
 
     def test_build_prompt_with_memory(self):
         mem = ConversationMemory()

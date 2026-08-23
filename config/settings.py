@@ -15,10 +15,18 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
-# LLM
+# LLM Backend & Dual-Engine Router
+LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama").lower()  # "ollama" or "groq"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-LLM_MODEL = "llama3.2"
-LLM_TEMPERATURE = 0.0
+LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2")
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.0"))
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+# Query Condensation Strategy
+FAST_QUERY_CONDENSER = os.getenv("FAST_QUERY_CONDENSER", "true").lower() in ("true", "1", "yes")
+
 
 # Embeddings & HuggingFace
 HF_TOKEN = os.getenv("HF_TOKEN", "")
@@ -43,6 +51,8 @@ CHUNK_OVERLAP = 150
 TOP_K = 15
 RERANK_TOP_N = 3
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+USE_ONNX_RERANKER = os.getenv("USE_ONNX_RERANKER", "true").lower() in ("true", "1", "yes")
+ONNX_MODEL_DIR = os.getenv("ONNX_MODEL_DIR", "data/models/reranker_onnx")
 HYBRID_SEARCH_ENABLED = True
 RRF_K = 60  # Reciprocal Rank Fusion constant
 

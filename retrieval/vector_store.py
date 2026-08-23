@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from opensearchpy import OpenSearch, helpers
 
@@ -238,10 +239,13 @@ def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
 def hybrid_search(query: str, k: int = TOP_K, rrf_k: int = RRF_K) -> list[dict]:
     """
     Executes Hybrid Search combining Dense Vector Search and Lexical BM25 Search
-    using Reciprocal Rank Fusion (RRF).
+    concurrently using ThreadPoolExecutor and Reciprocal Rank Fusion (RRF).
     """
-    dense_results = vector_search(query, k=k)
-    bm25_results = lexical_search(query, k=k)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_dense = executor.submit(vector_search, query, k)
+        future_bm25 = executor.submit(lexical_search, query, k)
+        dense_results = future_dense.result()
+        bm25_results = future_bm25.result()
 
     # Compute Reciprocal Rank Fusion (RRF) scores
     rrf_scores: dict[str, float] = {}

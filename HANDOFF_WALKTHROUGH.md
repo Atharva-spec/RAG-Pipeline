@@ -32,7 +32,7 @@ A complete, exhaustive reference guide to the **Enterprise Agentic Hybrid RAG Pi
 ├──────────────────────────┼───────────────────────────────────────────────────────┤
 │ Conversational Memory    │ 5-Turn Sliding-Window Buffer + Agentic Query Condenser│
 ├──────────────────────────┼───────────────────────────────────────────────────────┤
-│ Target LLM Engine        │ Local Ollama (`llama3.2` 3B) / Cloud LLM (Groq / 70B) │
+│ Target LLM Engine        │ Cloud LLM (Groq `openai/gpt-oss-120b` / `llama-3.3`)  │
 ├──────────────────────────┼───────────────────────────────────────────────────────┤
 │ OS & Runtime Support     │ Windows (`.bat`, `.ps1`), macOS & Linux (`./rag`, npm)│
 ├──────────────────────────┼───────────────────────────────────────────────────────┤
@@ -95,7 +95,7 @@ A complete, exhaustive reference guide to the **Enterprise Agentic Hybrid RAG Pi
                                        ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
 │             LAYER 6: LLM SYNTHESIS & PRE-DISPLAY OUTPUT GUARDRAIL         │
-│  ├── Generation: Ollama `llama3.2` (or Cloud Groq `llama-3.3-70b`)        │
+│  ├── Generation: Cloud LLM (Groq `openai/gpt-oss-120b` / `llama-3.3-70b`) │
 │  ├── Output Guardrail:                                                    │
 │  │   ├── Auto-Redacts API Keys / Secrets (OpenAI, AWS, GitHub, Bearer)    │
 │  │   ├── Intercepts & Scrubs Accidental System Prompt Leaks               │
@@ -215,8 +215,7 @@ Ran 45 tests in 5.210s — 100% OK
 
 ```bash
 # Start background services
-docker compose up -d
-ollama serve
+npm run docker:up  # Starts PostgreSQL pgvector container
 
 # Everyday Commands
 npm start                  # Start interactive conversational chat (macOS/Linux: ./rag --chat, Windows: rag.bat --chat)
@@ -234,9 +233,9 @@ npm test                   # Run all 45 automated unit tests
 ## 8. Future Roadmap & Scaling Strategy
 
 1. **Phase 1: Performance Optimization (<200ms TTFT)**
-   * Dual-engine router (Local Ollama default + optional Free Cloud Groq `llama-3.3-70b` for 800 tok/sec).
-   * Parallelize Vector + BM25 search via `asyncio.gather`.
-   * ONNX runtime INT8 quantization for the Cross-Encoder reranker.
+   * Cloud LLM Engine (High-speed Cloud Groq for 800 tok/sec).
+   * Parallelize Vector + BM25 search via thread-pool executor.
+   * ONNX runtime quantization for the Cross-Encoder reranker.
 2. **Phase 2: Production API & Caching (FastAPI + Redis)**
    * Multi-tier Redis caching (sub-5ms response for repeated queries).
    * Server-Sent Events (SSE) token streaming.

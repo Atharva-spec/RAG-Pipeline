@@ -15,14 +15,12 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
-# LLM Backend & Dual-Engine Router
-LLM_BACKEND = os.getenv("LLM_BACKEND", "ollama").lower()  # "ollama" or "groq"
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2")
-LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.0"))
-
+# LLM Backend & Cloud Generation
+LLM_BACKEND = os.getenv("LLM_BACKEND", "groq").lower()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+LLM_MODEL = os.getenv("LLM_MODEL", GROQ_MODEL)
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
 # Query Condensation Strategy
 FAST_QUERY_CONDENSER = os.getenv("FAST_QUERY_CONDENSER", "true").lower() in ("true", "1", "yes")

@@ -16,21 +16,21 @@ A complete, copy-pasteable reference cheat sheet for all commands, flags, backgr
 | **RAGAS Evaluation** | `npm run eval` | `./rag --evaluate` | `rag.bat --evaluate` |
 | **Calibrate Threshold** | `npm run calibrate` | `./rag --calibrate` | `rag.bat --calibrate` |
 | **Run Unit Tests** | `npm test` | `npm test` | `npm test` |
-| **Start OpenSearch** | `npm run docker:up` | `docker compose up -d` | `docker compose up -d` |
+| **Start PostgreSQL** | `npm run docker:up` | `docker compose up -d` | `docker compose up -d` |
 
 ---
 
-## 1. Background Services Setup
+## 1. Background Services & Cloud Setup
 
-Ensure Docker and Ollama are running before querying:
+Ensure PostgreSQL is running and your Groq Cloud API key is configured in `.env`:
 
 ```bash
-# 1. Start OpenSearch Container (via Docker Compose)
-docker compose up -d
-# (Or: docker start native-rag-pipeline)
+# 1. Start PostgreSQL (pgvector) Container (via Docker Compose)
+npm run docker:up
+# (Or: docker compose up -d)
 
-# 2. Start Local Ollama LLM
-ollama serve
+# 2. Configure Groq Cloud LLM in .env
+# Ensure GROQ_API_KEY=gsk_... is set in your .env file
 ```
 
 ---

@@ -3,10 +3,10 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Database: PostgreSQL pgvector](https://img.shields.io/badge/Database-PostgreSQL_pgvector-336791.svg)](https://github.com/pgvector/pgvector)
-[![LLM: Groq / Ollama](https://img.shields.io/badge/LLM-Groq_%7C_Ollama-f55036.svg)](https://groq.com/)
+[![LLM: Groq Cloud](https://img.shields.io/badge/LLM-Groq_Cloud-f55036.svg)](https://groq.com/)
 [![Tests: 54 Passing](https://img.shields.io/badge/tests-54%20passed-success.svg)]()
 
-A high-performance, production-ready Conversational Knowledge Engine featuring **PostgreSQL HNSW `pgvector`**, **GIN Full-Text Lexical Search**, **Hierarchical Parent-Child Chunking**, **ONNX Runtime Quantized Reranking**, **Multi-Layer Guardrails**, and **Dual-Engine LLM Router (Groq & Local Ollama)**.
+A high-performance, production-ready Conversational Knowledge Engine featuring **PostgreSQL HNSW `pgvector`**, **GIN Full-Text Lexical Search**, **Hierarchical Parent-Child Chunking**, **ONNX Runtime Quantized Reranking**, **Multi-Layer Guardrails**, and **High-Speed Cloud LLM (Groq)**.
 
 ```
 Drop in PDFs, Word docs, PPTs, or Notes ──► Chat grounded in your documents with ZERO hallucinations
@@ -54,7 +54,7 @@ Drop in PDFs, Word docs, PPTs, or Notes ──► Chat grounded in your document
 │                LAYER 5: CONTEXT RESOLUTION & LLM GENERATION               │
 │  ├── Parent Context Resolution (Fetches full 2,000c parent paragraphs)    │
 │  ├── Parent Deduplication (Removes redundant overlapping parents)         │
-│  ├── Dual-Engine LLM Router (Groq LPU high-speed cloud / Local Ollama)    │
+│  ├── Cloud LLM Engine (Groq LPU high-speed inference)                     │
 │  ├── Output Guardrail & Redaction (Scrubs keys & system prompt leakage)   │
 │  └── Verifiable Inline Citations (Direct transparent quote verification)  │
 └───────────────────────────────────────────────────────────────────────────┘
@@ -66,7 +66,7 @@ Drop in PDFs, Word docs, PPTs, or Notes ──► Chat grounded in your document
 
 * **Lightweight PostgreSQL + `pgvector` Core**: Uses `pgvector/pgvector:pg16` in Docker (<80 MB RAM), replacing heavy legacy engines.
 * **HNSW Hybrid Retrieval with RRF**: Combines dense vector cosine distance + GIN full-text search using Reciprocal Rank Fusion (RRF).
-* **Dual-Engine LLM Router**: Seamless cloud inference via **Groq** (`llama-3.3-70b`, `openai/gpt-oss-120b`) with local air-gapped **Ollama** fallback.
+* **High-Speed Cloud LLM Engine**: Ultra-fast inference via **Groq Cloud** (`openai/gpt-oss-120b`, `llama-3.3-70b-versatile`).
 * **ONNX Runtime Reranker Quantization**: Accelerated Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) with 3–4× faster CPU latency.
 * **Hierarchical (Parent-Child) Chunking**: Slices documents into 400-char child snippets for vector indexing while linking 2,000-char parent context blocks for generation.
 * **Multi-Layer Guardrails System**: Blocks prompt injections, leetspeak, homoglyphs, and base64 payloads, routes chit-chat in 0ms, and enforces confidence gates.
@@ -95,7 +95,7 @@ POSTGRES_DB=rag_db
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 
-# LLM Backend: "groq" or "ollama"
+# LLM Backend: "groq"
 LLM_BACKEND=groq
 GROQ_API_KEY=gsk_your_groq_key_here
 GROQ_MODEL=openai/gpt-oss-120b
@@ -168,7 +168,7 @@ RAG-pipeline/
 │   ├── query_condenser.py       # Fast heuristic & LLM query condensation
 │   ├── prompt_builder.py        # Context builder with parent deduplication
 │   ├── citation_resolver.py     # Inline quote & transparent confidence resolver
-│   └── llm_client.py            # Dual-Engine LLM Router (Groq & Ollama)
+│   └── llm_client.py            # High-Speed Cloud LLM Client (Groq)
 ├── tests/
 │   └── test_pipeline.py         # 54 unit tests covering all pipeline modules
 ├── data/

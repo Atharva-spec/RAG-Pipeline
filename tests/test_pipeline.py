@@ -354,13 +354,13 @@ class TestReranker(unittest.TestCase):
         self.assertIn("Retrieval-Augmented Generation", ranked[0]["text"])
 
 
-class TestDualEngineLLM(unittest.TestCase):
-    @patch("generation.llm_client._call_ollama")
-    def test_ollama_backend_default(self, mock_ollama):
-        mock_ollama.return_value = "Ollama response"
-        ans = get_answer([{"role": "user", "content": "hello"}], backend="ollama")
-        self.assertEqual(ans, "Ollama response")
-        mock_ollama.assert_called_once()
+class TestCloudLLM(unittest.TestCase):
+    @patch("generation.llm_client._call_groq")
+    def test_default_backend_routes_to_groq(self, mock_groq):
+        mock_groq.return_value = "Groq cloud response"
+        ans = get_answer([{"role": "user", "content": "hello"}])
+        self.assertEqual(ans, "Groq cloud response")
+        mock_groq.assert_called_once()
 
     @patch("generation.llm_client._call_groq")
     def test_groq_backend_success(self, mock_groq):
@@ -370,13 +370,10 @@ class TestDualEngineLLM(unittest.TestCase):
         mock_groq.assert_called_once()
 
     @patch("generation.llm_client._call_groq")
-    @patch("generation.llm_client._call_ollama")
-    def test_groq_backend_fallback_to_ollama(self, mock_ollama, mock_groq):
+    def test_groq_backend_error_handling(self, mock_groq):
         mock_groq.side_effect = Exception("API rate limit exceeded")
-        mock_ollama.return_value = "Fallback Ollama response"
-        ans = get_answer([{"role": "user", "content": "hello"}], backend="groq")
-        self.assertEqual(ans, "Fallback Ollama response")
-        mock_ollama.assert_called_once()
+        with self.assertRaises(RuntimeError):
+            get_answer([{"role": "user", "content": "hello"}], backend="groq")
 
 
 class TestParallelHybridSearch(unittest.TestCase):

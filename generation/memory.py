@@ -48,7 +48,7 @@ class ConversationMemory:
 
     def get_history_messages(self) -> List[dict]:
         """
-        Returns messages in OpenAI / Ollama format: [{'role': 'user', ...}, {'role': 'assistant', ...}]
+        Returns messages in OpenAI / Chat format: [{'role': 'user', ...}, {'role': 'assistant', ...}]
         """
         messages = []
         for turn in self.turns:

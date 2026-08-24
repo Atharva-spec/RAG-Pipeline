@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Optional
 
-import ollama
 from openai import OpenAI
 
 from config.settings import (
@@ -11,7 +10,6 @@ from config.settings import (
     LLM_BACKEND,
     LLM_MODEL,
     LLM_TEMPERATURE,
-    OLLAMA_BASE_URL,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,19 +29,16 @@ def _get_groq_client() -> Optional[OpenAI]:
     return _groq_client
 
 
-def _call_ollama(messages: list[dict], model: str = LLM_MODEL, temperature: float = LLM_TEMPERATURE) -> str:
-    response = ollama.chat(
-        model=model,
-        messages=messages,
-        options={"temperature": temperature},
-    )
-    return response["message"]["content"]
-
-
-def _call_groq(messages: list[dict], model: str = GROQ_MODEL, temperature: float = LLM_TEMPERATURE) -> str:
+def _call_groq(
+    messages: list[dict],
+    model: str = GROQ_MODEL,
+    temperature: float = LLM_TEMPERATURE,
+) -> str:
     client = _get_groq_client()
     if not client:
-        raise ValueError("GROQ_API_KEY not set or invalid.")
+        raise ValueError(
+            "GROQ_API_KEY is not set or invalid. Please configure GROQ_API_KEY in your .env file."
+        )
     completion = client.chat.completions.create(
         model=model,
         messages=messages,  # type: ignore
@@ -58,18 +53,13 @@ def get_answer(
     temperature: float = LLM_TEMPERATURE,
 ) -> str:
     """
-    Dispatches generation request to chosen LLM backend (Ollama or Groq).
-    If Groq fails or is not configured, gracefully falls back to local Ollama.
+    Dispatches generation request to Cloud LLM backend (Groq).
     """
     selected_backend = (backend or LLM_BACKEND).lower()
 
-    if selected_backend == "groq":
-        try:
-            return _call_groq(messages, model=GROQ_MODEL, temperature=temperature)
-        except Exception as e:
-            logger.warning(f"Groq API call failed ({e}). Falling back to local Ollama...")
-            print(f"  [LLM Router Warning] Groq failed: {e}. Falling back to Ollama.")
-            return _call_ollama(messages, model=LLM_MODEL, temperature=temperature)
-
-    # Default: Local Ollama
-    return _call_ollama(messages, model=LLM_MODEL, temperature=temperature)
+    try:
+        model = GROQ_MODEL if selected_backend == "groq" else (LLM_MODEL or GROQ_MODEL)
+        return _call_groq(messages, model=model, temperature=temperature)
+    except Exception as e:
+        logger.error(f"Cloud LLM call failed: {e}")
+        raise RuntimeError(f"Cloud LLM generation failed: {e}") from e

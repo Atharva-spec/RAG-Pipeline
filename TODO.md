@@ -22,9 +22,8 @@
 
 ## 🚀 Phase 1: Performance & Latency Optimization (Target: <200ms TTFT)
 
-- [x] **1.1 Dual-Engine LLM Router**:
-  - Add optional Groq API connector (`llama-3.3-70b` / `llama-3.1-8b-instant`) in `llm_client.py` switchable via `.env` (`LLM_BACKEND=ollama|groq`).
-  - Keep 100% local air-gapped Ollama as default fallback.
+- [x] **1.1 Cloud LLM Engine**:
+  - Integrated high-speed Cloud LLM (Groq `openai/gpt-oss-120b`, `llama-3.3-70b-versatile`) in `llm_client.py`.
 - [x] **1.2 Parallelize Vector + BM25 Hybrid Retrieval**:
   - Concurrently run dense vector search and BM25 lexical search via thread-pool executor in `vector_store.py` (shaves ~40ms).
 - [x] **1.3 ONNX Runtime Cross-Encoder Quantization**:

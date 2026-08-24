@@ -7,8 +7,6 @@ from config.settings import (
     GROQ_API_KEY,
     GROQ_MODEL,
     LLM_BACKEND,
-    LLM_MODEL,
-    OLLAMA_BASE_URL,
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PORT,
@@ -39,27 +37,17 @@ def check_postgres() -> Tuple[bool, str]:
 
 
 def check_llm() -> Tuple[bool, str]:
-    backend = LLM_BACKEND.lower()
-    if backend == "groq":
-        if not GROQ_API_KEY:
-            return False, "GROQ_API_KEY is not set in .env"
-        try:
-            from generation.llm_client import _get_groq_client
+    if not GROQ_API_KEY:
+        return False, "GROQ_API_KEY is not set in .env"
+    try:
+        from generation.llm_client import _get_groq_client
 
-            client = _get_groq_client()
-            if client:
-                return True, f"Groq Cloud API Online (Model: '{GROQ_MODEL}')"
-            return False, "Failed to initialize Groq client"
-        except Exception as e:
-            return False, f"Groq API error ({e})"
-    else:
-        try:
-            import ollama
-
-            response = ollama.list()
-            return True, f"Connected to Ollama (Model '{LLM_MODEL}')"
-        except Exception as e:
-            return False, f"Ollama unreachable ({e}). Run: ollama serve"
+        client = _get_groq_client()
+        if client:
+            return True, f"Groq Cloud API Online (Model: '{GROQ_MODEL}')"
+        return False, "Failed to initialize Groq client"
+    except Exception as e:
+        return False, f"Groq API error ({e})"
 
 
 def run_preflight_check() -> bool:
@@ -85,13 +73,10 @@ def run_preflight_check() -> bool:
 
     # LLM status
     if llm_ok:
-        print(f"  [✓] LLM Engine ({LLM_BACKEND.upper()}):         ONLINE ({llm_msg})")
+        print(f"  [✓] LLM Engine (GROQ CLOUD):       ONLINE ({llm_msg})")
     else:
-        print(f"  [✗] LLM Engine ({LLM_BACKEND.upper()}):         OFFLINE")
-        if LLM_BACKEND.lower() == "groq":
-            print(f"      👉 Fix: Check GROQ_API_KEY in .env")
-        else:
-            print(f"      👉 Fix: Run 'ollama serve'")
+        print(f"  [✗] LLM Engine (GROQ CLOUD):       OFFLINE ({llm_msg})")
+        print(f"      👉 Fix: Ensure GROQ_API_KEY is properly set in .env")
 
     print("=" * 60)
 
@@ -100,3 +85,4 @@ def run_preflight_check() -> bool:
         print("  Please start them using the commands above for full functionality.\n")
 
     return all_healthy
+

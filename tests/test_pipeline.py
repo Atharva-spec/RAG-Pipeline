@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -354,13 +355,13 @@ class TestReranker(unittest.TestCase):
         self.assertIn("Retrieval-Augmented Generation", ranked[0]["text"])
 
 
-class TestDualEngineLLM(unittest.TestCase):
-    @patch("generation.llm_client._call_ollama")
-    def test_ollama_backend_default(self, mock_ollama):
-        mock_ollama.return_value = "Ollama response"
-        ans = get_answer([{"role": "user", "content": "hello"}], backend="ollama")
-        self.assertEqual(ans, "Ollama response")
-        mock_ollama.assert_called_once()
+class TestCloudLLM(unittest.TestCase):
+    @patch("generation.llm_client._call_groq")
+    def test_default_backend_routes_to_groq(self, mock_groq):
+        mock_groq.return_value = "Groq cloud response"
+        ans = get_answer([{"role": "user", "content": "hello"}])
+        self.assertEqual(ans, "Groq cloud response")
+        mock_groq.assert_called_once()
 
     @patch("generation.llm_client._call_groq")
     def test_groq_backend_success(self, mock_groq):
@@ -370,13 +371,10 @@ class TestDualEngineLLM(unittest.TestCase):
         mock_groq.assert_called_once()
 
     @patch("generation.llm_client._call_groq")
-    @patch("generation.llm_client._call_ollama")
-    def test_groq_backend_fallback_to_ollama(self, mock_ollama, mock_groq):
+    def test_groq_backend_error_handling(self, mock_groq):
         mock_groq.side_effect = Exception("API rate limit exceeded")
-        mock_ollama.return_value = "Fallback Ollama response"
-        ans = get_answer([{"role": "user", "content": "hello"}], backend="groq")
-        self.assertEqual(ans, "Fallback Ollama response")
-        mock_ollama.assert_called_once()
+        with self.assertRaises(RuntimeError):
+            get_answer([{"role": "user", "content": "hello"}], backend="groq")
 
 
 class TestParallelHybridSearch(unittest.TestCase):
@@ -660,6 +658,178 @@ class TestConfidenceCalibration(unittest.TestCase):
         optimal = find_optimal_threshold(sweep_rows)
         self.assertEqual(optimal["threshold"], 0.40)
         self.assertEqual(optimal["f1"], 1.0)
+
+
+class TestRedisCaching(unittest.TestCase):
+    @patch("core.cache.get_redis_client")
+    def test_answer_cache_hit_and_miss(self, mock_client):
+        mock_redis = MagicMock()
+        mock_client.return_value = mock_redis
+
+        # Test cache miss
+        mock_redis.get.return_value = None
+        from core.cache import get_cached_answer, set_cached_answer
+        res = get_cached_answer("test question")
+        self.assertIsNone(res)
+
+        # Test cache set
+        set_cached_answer("test question", {"answer": "cached answer", "confidence_score": 0.95})
+        mock_redis.set.assert_called_once()
+
+        # Test cache hit
+        mock_redis.get.return_value = json.dumps({"answer": "cached answer", "confidence_score": 0.95})
+        hit = get_cached_answer("test question")
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["answer"], "cached answer")
+        self.assertTrue(hit["cached"])
+
+    @patch("core.cache.get_redis_client")
+    def test_vector_cache_hit_and_miss(self, mock_client):
+        mock_redis = MagicMock()
+        mock_client.return_value = mock_redis
+        from core.cache import get_cached_embedding, set_cached_embedding
+
+        mock_redis.get.return_value = None
+        self.assertIsNone(get_cached_embedding("hello"))
+
+        set_cached_embedding("hello", [0.1, 0.2, 0.3])
+        mock_redis.set.assert_called_once()
+
+        mock_redis.get.return_value = json.dumps([0.1, 0.2, 0.3])
+        vector = get_cached_embedding("hello")
+        self.assertEqual(vector, [0.1, 0.2, 0.3])
+
+    @patch("core.cache.get_redis_client")
+    def test_session_cache_and_clear(self, mock_client):
+        mock_redis = MagicMock()
+        mock_client.return_value = mock_redis
+        from core.cache import clear_cached_session, get_cached_session, set_cached_session
+
+        set_cached_session("sess_1", [{"user_message": "hi", "assistant_answer": "hello"}])
+        mock_redis.set.assert_called_once()
+
+        clear_cached_session("sess_1")
+        mock_redis.delete.assert_called_once_with("rag:session:sess_1")
+
+
+class TestFastAPIServer(unittest.TestCase):
+    def setUp(self):
+        from fastapi.testclient import TestClient
+        from api.server import app
+        self.client = TestClient(app)
+
+    @patch("api.server.check_postgres")
+    @patch("api.server.check_llm")
+    @patch("api.server.get_cache_stats")
+    def test_health_endpoint(self, mock_redis_stats, mock_llm, mock_pg):
+        mock_pg.return_value = (True, "PostgreSQL Online")
+        mock_llm.return_value = (True, "Groq Cloud Online")
+        mock_redis_stats.return_value = {"status": "online", "enabled": True}
+
+        response = self.client.get("/v1/health")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "healthy")
+        self.assertTrue(data["database"]["online"])
+        self.assertTrue(data["llm_engine"]["online"])
+
+    def test_chit_chat_fast_routing_endpoint(self):
+        response = self.client.post(
+            "/v1/query",
+            json={"question": "Hello there!", "session_id": "test_session"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["refusal"])
+        self.assertEqual(data["confidence_score"], 1.0)
+        self.assertIn("Hello", data["answer"])
+
+    @patch("api.server.retrieve_chunks")
+    @patch("api.server.rerank_chunks")
+    @patch("api.server.get_answer")
+    def test_query_endpoint_full_pipeline(self, mock_get_answer, mock_rerank, mock_retrieve):
+        mock_retrieve.return_value = [
+            {"chunk_id": "c1", "text": "Supervised learning uses labeled data.", "source": "ml.pdf", "score": 0.9}
+        ]
+        mock_rerank.return_value = [
+            {"chunk_id": "c1", "text": "Supervised learning uses labeled data.", "source": "ml.pdf", "confidence_score": 0.94}
+        ]
+        mock_get_answer.return_value = "Supervised learning is trained on labeled data [1]."
+
+        response = self.client.post(
+            "/v1/query",
+            json={"question": "What is supervised learning?", "session_id": "test_session_2"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["refusal"])
+        self.assertGreaterEqual(data["confidence_score"], 0.20)
+        self.assertIn("Supervised learning", data["answer"])
+        self.assertGreater(len(data["citations"]), 0)
+
+    @patch("api.server.retrieve_chunks")
+    @patch("api.server.rerank_chunks")
+    @patch("api.server.stream_answer")
+    def test_query_stream_endpoint(self, mock_stream, mock_rerank, mock_retrieve):
+        mock_retrieve.return_value = [
+            {"chunk_id": "c1", "text": "Deep learning uses neural networks.", "source": "dl.pdf", "score": 0.9}
+        ]
+        mock_rerank.return_value = [
+            {"chunk_id": "c1", "text": "Deep learning uses neural networks.", "source": "dl.pdf", "confidence_score": 0.92}
+        ]
+        mock_stream.return_value = ["Deep ", "learning ", "uses ", "neural ", "networks."]
+
+        response = self.client.post(
+            "/v1/query/stream",
+            json={"question": "Explain deep learning", "session_id": "test_stream"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/event-stream", response.headers["content-type"])
+        body = response.text
+        self.assertIn("event", body)
+        self.assertIn("token", body)
+
+    def test_models_config_endpoints(self):
+        # GET /v1/models
+        res_get = self.client.get("/v1/models")
+        self.assertEqual(res_get.status_code, 200)
+        data_get = res_get.json()
+        self.assertIn("active_model", data_get)
+        self.assertGreater(len(data_get["available_models"]), 0)
+
+        # POST /v1/models/config
+        res_post = self.client.post(
+            "/v1/models/config",
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "temperature": 0.5,
+                "confidence_threshold": 0.25,
+                "top_k": 10,
+                "rerank_top_n": 4,
+                "use_hierarchical_parents": True,
+                "guardrails_enabled": True,
+            },
+        )
+        self.assertEqual(res_post.status_code, 200)
+        data_post = res_post.json()
+        self.assertEqual(data_post["configuration"]["temperature"], 0.5)
+        self.assertEqual(data_post["configuration"]["model"], "llama-3.3-70b-versatile")
+
+    def test_memory_clear_endpoint(self):
+        res = self.client.post("/v1/memory/clear?session_id=user_123")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["status"], "success")
+
+
+class TestSpellCorrector(unittest.TestCase):
+    def test_spelling_corrections(self):
+        from generation.spell_corrector import correct_query_spelling
+        from generation.query_condenser import normalize_query_terms
+
+        self.assertEqual(normalize_query_terms("what is pre procesing"), "what is preprocessing")
+        self.assertEqual(normalize_query_terms("suprvised lerning"), "supervised learning")
+        self.assertEqual(normalize_query_terms("explain descision tree classifcation"), "explain decision tree classification")
+        self.assertEqual(normalize_query_terms("dimenshional modling"), "dimensional modeling")
 
 
 if __name__ == "__main__":

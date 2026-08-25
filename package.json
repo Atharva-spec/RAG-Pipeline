@@ -15,8 +15,10 @@
     "eval": "node scripts/run.js --evaluate",
     "calibrate": "node scripts/run.js --calibrate",
     "test": "node scripts/run.js test",
+    "server": "node scripts/run.js server",
+    "api": "node scripts/run.js server",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:start": "docker start rag-postgres"
+    "docker:start": "docker start rag-postgres rag-redis"
   }
 }

@@ -23,8 +23,6 @@ from config.settings import (
     RRF_K,
     TOP_K,
 )
-from ingestion.embedder import get_embedding_model
-
 logger = logging.getLogger(__name__)
 
 _embedder_instance: Any = None
@@ -33,6 +31,7 @@ _embedder_instance: Any = None
 def get_embedder():
     global _embedder_instance
     if _embedder_instance is None:
+        from ingestion.embedder import get_embedding_model
         _embedder_instance = get_embedding_model()
     return _embedder_instance
 

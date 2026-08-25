@@ -9,6 +9,7 @@ A complete, copy-pasteable reference cheat sheet for all commands, flags, backgr
 | Goal | Universal (npm) | macOS / Linux | Windows (CMD / PowerShell) |
 | :--- | :--- | :--- | :--- |
 | **Start Chat** | `npm start` *(or `npm run chat`)* | `./rag --chat` | `rag.bat --chat` *(or `.\rag.ps1 --chat`)* |
+| **Start API Server** | `npm run server` *(or `npm run api`)* | `./rag server` | `rag.bat server` |
 | **Hands-Free Watcher** | `npm run watch` | `./rag --watch` | `rag.bat --watch` |
 | **Single Question** | `npm run query -- "<text>"` | `./rag --query "<text>"` | `rag.bat --query "<text>"` |
 | **Incremental Sync** | `npm run ingest` | `./rag --ingest` | `rag.bat --ingest` |
@@ -16,21 +17,25 @@ A complete, copy-pasteable reference cheat sheet for all commands, flags, backgr
 | **RAGAS Evaluation** | `npm run eval` | `./rag --evaluate` | `rag.bat --evaluate` |
 | **Calibrate Threshold** | `npm run calibrate` | `./rag --calibrate` | `rag.bat --calibrate` |
 | **Run Unit Tests** | `npm test` | `npm test` | `npm test` |
-| **Start OpenSearch** | `npm run docker:up` | `docker compose up -d` | `docker compose up -d` |
+| **Start Postgres + Redis** | `npm run docker:up` | `docker compose up -d` | `docker compose up -d` |
 
 ---
 
-## 1. Background Services Setup
+## 1. Background Services & Cloud Setup
 
-Ensure Docker and Ollama are running before querying:
+Ensure PostgreSQL and Redis are running and your Groq Cloud API key is configured in `.env`:
 
 ```bash
-# 1. Start OpenSearch Container (via Docker Compose)
-docker compose up -d
-# (Or: docker start native-rag-pipeline)
+# 1. Start PostgreSQL (pgvector) & Redis Containers
+npm run docker:up
+# (Or: docker compose up -d)
 
-# 2. Start Local Ollama LLM
-ollama serve
+# 2. Configure Groq Cloud LLM in .env
+# Ensure GROQ_API_KEY=gsk_... is set in your .env file
+
+# 3. Launch FastAPI Asynchronous REST & SSE Streaming Server
+npm run server
+# (Runs on http://localhost:8000 with interactive docs at http://localhost:8000/docs)
 ```
 
 ---

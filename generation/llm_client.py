@@ -1,9 +1,6 @@
 import logging
 import os
-from typing import Optional
-
-import ollama
-from openai import OpenAI
+from typing import Any, Optional
 
 from config.settings import (
     GROQ_API_KEY,
@@ -11,19 +8,19 @@ from config.settings import (
     LLM_BACKEND,
     LLM_MODEL,
     LLM_TEMPERATURE,
-    OLLAMA_BASE_URL,
 )
 
 logger = logging.getLogger(__name__)
 
-_groq_client: Optional[OpenAI] = None
+_groq_client: Optional[Any] = None
 
 
-def _get_groq_client() -> Optional[OpenAI]:
+def _get_groq_client() -> Optional[Any]:
     global _groq_client
     if _groq_client is None:
         api_key = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
         if api_key:
+            from openai import OpenAI
             _groq_client = OpenAI(
                 api_key=api_key,
                 base_url="https://api.groq.com/openai/v1",
@@ -31,19 +28,16 @@ def _get_groq_client() -> Optional[OpenAI]:
     return _groq_client
 
 
-def _call_ollama(messages: list[dict], model: str = LLM_MODEL, temperature: float = LLM_TEMPERATURE) -> str:
-    response = ollama.chat(
-        model=model,
-        messages=messages,
-        options={"temperature": temperature},
-    )
-    return response["message"]["content"]
-
-
-def _call_groq(messages: list[dict], model: str = GROQ_MODEL, temperature: float = LLM_TEMPERATURE) -> str:
+def _call_groq(
+    messages: list[dict],
+    model: str = GROQ_MODEL,
+    temperature: float = LLM_TEMPERATURE,
+) -> str:
     client = _get_groq_client()
     if not client:
-        raise ValueError("GROQ_API_KEY not set or invalid.")
+        raise ValueError(
+            "GROQ_API_KEY is not set or invalid. Please configure GROQ_API_KEY in your .env file."
+        )
     completion = client.chat.completions.create(
         model=model,
         messages=messages,  # type: ignore
@@ -52,24 +46,66 @@ def _call_groq(messages: list[dict], model: str = GROQ_MODEL, temperature: float
     return completion.choices[0].message.content or ""
 
 
-def get_answer(
+def _stream_groq(
     messages: list[dict],
+    model: str = GROQ_MODEL,
+    temperature: float = LLM_TEMPERATURE,
+):
+    client = _get_groq_client()
+    if not client:
+        raise ValueError(
+            "GROQ_API_KEY is not set or invalid. Please configure GROQ_API_KEY in your .env file."
+        )
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,  # type: ignore
+        temperature=temperature,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+
+def get_answer(
+    messages: Any,
     backend: Optional[str] = None,
     temperature: float = LLM_TEMPERATURE,
 ) -> str:
     """
-    Dispatches generation request to chosen LLM backend (Ollama or Groq).
-    If Groq fails or is not configured, gracefully falls back to local Ollama.
+    Dispatches generation request to Cloud LLM backend (Groq).
+    Accepts either a list of message dicts or a raw string prompt.
     """
+    if isinstance(messages, str):
+        messages = [{"role": "user", "content": messages}]
+
     selected_backend = (backend or LLM_BACKEND).lower()
 
-    if selected_backend == "groq":
-        try:
-            return _call_groq(messages, model=GROQ_MODEL, temperature=temperature)
-        except Exception as e:
-            logger.warning(f"Groq API call failed ({e}). Falling back to local Ollama...")
-            print(f"  [LLM Router Warning] Groq failed: {e}. Falling back to Ollama.")
-            return _call_ollama(messages, model=LLM_MODEL, temperature=temperature)
+    try:
+        model = GROQ_MODEL if selected_backend == "groq" else (LLM_MODEL or GROQ_MODEL)
+        return _call_groq(messages, model=model, temperature=temperature)
+    except Exception as e:
+        logger.error(f"Cloud LLM call failed: {e}")
+        raise RuntimeError(f"Cloud LLM generation failed: {e}") from e
 
-    # Default: Local Ollama
-    return _call_ollama(messages, model=LLM_MODEL, temperature=temperature)
+
+def stream_answer(
+    messages: Any,
+    backend: Optional[str] = None,
+    temperature: float = LLM_TEMPERATURE,
+):
+    """
+    Yields streaming tokens in real time from Cloud LLM backend (Groq).
+    Accepts either a list of message dicts or a raw string prompt.
+    """
+    if isinstance(messages, str):
+        messages = [{"role": "user", "content": messages}]
+
+    selected_backend = (backend or LLM_BACKEND).lower()
+
+    try:
+        model = GROQ_MODEL if selected_backend == "groq" else (LLM_MODEL or GROQ_MODEL)
+        yield from _stream_groq(messages, model=model, temperature=temperature)
+    except Exception as e:
+        logger.error(f"Cloud LLM streaming failed: {e}")
+        raise RuntimeError(f"Cloud LLM streaming failed: {e}") from e

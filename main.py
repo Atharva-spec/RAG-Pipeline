@@ -14,10 +14,6 @@ from generation.llm_client import get_answer
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
-from ingestion.chunker import chunk_documents
-from ingestion.document_loader import load_documents
-from ingestion.incremental_ingest import sync_incremental
-from ingestion.watcher import start_file_watcher
 from retrieval.health_check import run_preflight_check
 from retrieval.reranker import rerank_chunks
 from retrieval.retriever import retrieve_chunks
@@ -33,7 +29,10 @@ def ingest(data_dir: str = "data/raw", rebuild: bool = False):
     - If rebuild=False: Smart incremental sync (skips unchanged files in <5ms).
     """
     if rebuild:
-        print("\n--- Rebuilding OpenSearch Index from Scratch ---")
+        from ingestion.chunker import chunk_documents
+        from ingestion.document_loader import load_documents
+
+        print("\n--- Rebuilding PostgreSQL Vector Index from Scratch ---")
         delete_index()
         documents = load_documents(data_dir)
         if not documents:
@@ -46,8 +45,9 @@ def ingest(data_dir: str = "data/raw", rebuild: bool = False):
 
         create_index()
         add_chunks(chunks)
-        print("Ingestion complete. All chunks stored in OpenSearch.\n")
+        print("Ingestion complete. All chunks stored in PostgreSQL.\n")
     else:
+        from ingestion.incremental_ingest import sync_incremental
         sync_incremental(data_dir, verbose=True)
 
 
@@ -119,9 +119,6 @@ def chat_loop():
     """
     # 1. Run Pre-flight Health Check
     run_preflight_check()
-
-    # 2. Fast background incremental sync
-    sync_incremental(verbose=False)
 
     memory = ConversationMemory(max_turns=5)
 
@@ -199,6 +196,7 @@ if __name__ == "__main__":
         from evaluation.calibrate_threshold import run_confidence_calibration
         run_confidence_calibration()
     elif args.watch:
+        from ingestion.watcher import start_file_watcher
         start_file_watcher()
     elif args.evaluate:
         from evaluation.run_eval import run_evaluation_cli

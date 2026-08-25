@@ -43,6 +43,7 @@ from generation.llm_client import get_answer, stream_answer
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
+from generation.rephraser_agent import rephrase_query
 from ingestion.incremental_ingest import sync_incremental
 from retrieval.health_check import check_llm, check_postgres
 from retrieval.reranker import rerank_chunks
@@ -235,9 +236,9 @@ def execute_query(payload: QueryRequest):
             refusal=False,
         )
 
-    # 3. Agentic Query Condensation
+    # 3. Rephraser Agent (Query reformulation, typo repair & context resolution)
     memory = ConversationMemory(session_id=session_id)
-    search_query = condense_query(question, memory=memory)
+    search_query = rephrase_query(question, memory=memory)
 
     # 4. Hybrid Retrieval (Vector + GIN with RRF)
     raw_chunks = retrieve_chunks(search_query, k=_runtime_config.top_k)
@@ -375,9 +376,9 @@ def execute_query_stream(payload: QueryRequest):
             yield f"data: {json.dumps({'event': 'done', 'refusal': False})}\n\n"
             return
 
-        # 3. Query Condensation & Retrieval
+        # 3. Rephraser Agent & Retrieval
         memory = ConversationMemory(session_id=session_id)
-        search_query = condense_query(question, memory=memory)
+        search_query = rephrase_query(question, memory=memory)
 
         raw_chunks = retrieve_chunks(search_query, k=_runtime_config.top_k)
         if payload.selected_docs:

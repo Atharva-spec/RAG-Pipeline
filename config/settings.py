@@ -25,7 +25,9 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 LLM_MODEL = os.getenv("LLM_MODEL", GROQ_MODEL)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
-# Query Condensation Strategy
+# Rephraser Agent & Query Transformation Strategy
+REPHRASER_AGENT_ENABLED = os.getenv("REPHRASER_AGENT_ENABLED", "true").lower() in ("true", "1", "yes")
+FAST_REPHRASER = os.getenv("FAST_REPHRASER", "true").lower() in ("true", "1", "yes")
 FAST_QUERY_CONDENSER = os.getenv("FAST_QUERY_CONDENSER", "true").lower() in ("true", "1", "yes")
 
 

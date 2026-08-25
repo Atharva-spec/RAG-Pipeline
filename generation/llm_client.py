@@ -47,6 +47,27 @@ def _call_groq(
     return completion.choices[0].message.content or ""
 
 
+def _stream_groq(
+    messages: list[dict],
+    model: str = GROQ_MODEL,
+    temperature: float = LLM_TEMPERATURE,
+):
+    client = _get_groq_client()
+    if not client:
+        raise ValueError(
+            "GROQ_API_KEY is not set or invalid. Please configure GROQ_API_KEY in your .env file."
+        )
+    stream = client.chat.completions.create(
+        model=model,
+        messages=messages,  # type: ignore
+        temperature=temperature,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
+
+
 def get_answer(
     messages: list[dict],
     backend: Optional[str] = None,
@@ -63,3 +84,21 @@ def get_answer(
     except Exception as e:
         logger.error(f"Cloud LLM call failed: {e}")
         raise RuntimeError(f"Cloud LLM generation failed: {e}") from e
+
+
+def stream_answer(
+    messages: list[dict],
+    backend: Optional[str] = None,
+    temperature: float = LLM_TEMPERATURE,
+):
+    """
+    Yields streaming tokens in real time from Cloud LLM backend (Groq).
+    """
+    selected_backend = (backend or LLM_BACKEND).lower()
+
+    try:
+        model = GROQ_MODEL if selected_backend == "groq" else (LLM_MODEL or GROQ_MODEL)
+        yield from _stream_groq(messages, model=model, temperature=temperature)
+    except Exception as e:
+        logger.error(f"Cloud LLM streaming failed: {e}")
+        raise RuntimeError(f"Cloud LLM streaming failed: {e}") from e

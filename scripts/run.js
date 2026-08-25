@@ -27,6 +27,8 @@ if (rawArgs.length === 0) {
   commandArgs = ["main.py", "--chat"];
 } else if (rawArgs[0] === "test") {
   commandArgs = ["-m", "unittest", "discover", "-s", "tests", "-v"];
+} else if (rawArgs[0] === "server" || rawArgs[0] === "api" || rawArgs[0] === "--server") {
+  commandArgs = ["-m", "uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload"];
 } else {
   commandArgs = ["main.py", ...rawArgs];
 }

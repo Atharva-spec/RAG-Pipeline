@@ -76,6 +76,17 @@ GUARDRAILS_ENABLED = True
 GUARDRAIL_CONFIDENCE_THRESHOLD = 0.20  # Minimum normalized confidence score (0.0 to 1.0)
 GUARDRAIL_BLOCK_PROMPT_INJECTION = True
 
+# Redis Cache Engine
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() in ("true", "1", "yes")
+REDIS_CACHE_TTL_SECONDS = int(os.getenv("REDIS_CACHE_TTL_SECONDS", "86400"))  # 24 hour TTL
+
+# API Web Server
+API_HOST = os.getenv("API_HOST", "0.0.0.0")
+API_PORT = int(os.getenv("API_PORT", "8000"))
+
 # Paths
 DATA_RAW_DIR = "data/raw"
 DATA_PROCESSED_DIR = "data/processed"

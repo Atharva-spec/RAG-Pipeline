@@ -48,8 +48,8 @@ CHUNK_SIZE = 800  # Fallback for simple recursive splitter
 CHUNK_OVERLAP = 150
 
 
-# Retrieval & Search Core
-TOP_K = 15
+# Retrieval & Search Core (Sub-200ms Tuned)
+TOP_K = 8
 RERANK_TOP_N = 3
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 USE_ONNX_RERANKER = os.getenv("USE_ONNX_RERANKER", "true").lower() in ("true", "1", "yes")

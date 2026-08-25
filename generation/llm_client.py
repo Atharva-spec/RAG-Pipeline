@@ -68,13 +68,17 @@ def _stream_groq(
 
 
 def get_answer(
-    messages: list[dict],
+    messages: Any,
     backend: Optional[str] = None,
     temperature: float = LLM_TEMPERATURE,
 ) -> str:
     """
     Dispatches generation request to Cloud LLM backend (Groq).
+    Accepts either a list of message dicts or a raw string prompt.
     """
+    if isinstance(messages, str):
+        messages = [{"role": "user", "content": messages}]
+
     selected_backend = (backend or LLM_BACKEND).lower()
 
     try:
@@ -86,13 +90,17 @@ def get_answer(
 
 
 def stream_answer(
-    messages: list[dict],
+    messages: Any,
     backend: Optional[str] = None,
     temperature: float = LLM_TEMPERATURE,
 ):
     """
     Yields streaming tokens in real time from Cloud LLM backend (Groq).
+    Accepts either a list of message dicts or a raw string prompt.
     """
+    if isinstance(messages, str):
+        messages = [{"role": "user", "content": messages}]
+
     selected_backend = (backend or LLM_BACKEND).lower()
 
     try:

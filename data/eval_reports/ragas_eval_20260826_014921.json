@@ -1,0 +1,74 @@
+{
+  "timestamp": "2026-08-25T20:19:21.590689+00:00",
+  "total_samples": 4,
+  "aggregate_metrics": {
+    "faithfulness": 0.9167,
+    "answer_relevance": 0.8547,
+    "context_precision": 0.8958,
+    "context_recall": 0.8864,
+    "ragas_score": 0.8884
+  },
+  "sample_evaluations": [
+    {
+      "id": "eval_01",
+      "question": "What are the three essential managerial skills according to Robert Katz?",
+      "ground_truth": "Robert Katz identified Technical Skills, Human or Interpersonal Skills, and Conceptual Skills as the three essential managerial skills.",
+      "answer": "The three essential managerial skills identified by Robert Katz are:\n\n1. **Technical Skills** \u2013 proficiency in specific methods, processes, or techniques relevant to the engineer\u2019s specialty\u30102\u3011.  \n2. **Human (Interpersonal) Skills** \u2013 the ability to work with, understand, and motivate individuals and groups; this \u201chuman constant\u201d remains important at every managerial level\u30102\u3011.  \n3. **Conceptual Skills** \u2013 the capacity to view the organization as a whole, recognizing interdependencies and the broader impact of decisions\u30102\u3011.\n\n\ud83d\udcda Sources & Citations:\n  [1] Lecture 3 (Notes & QB).pdf (Confidence: 99%)\n      \"Concept: Technical, Human, and Conceptual Skills. \uf0b7 Answer: Robert Katz identified three essential managerial skills:\"\n  [2] Lecture 3 (Notes & QB).pdf (Confidence: 99%)\n      \"A manager's primary tool is no longer the IDE (Integrated Development Environment); it is the Team. 2. The Robert Katz Model: Three Essential Skills Robert K...\"\n  [3] Lecture 3 (Notes & QB).pdf (Confidence: 99%)\n      \"Lecture 3: The Engineering-to- Management Bridge (Module1 from Syllabus) Types of Managerial Skills (Robert Katz Model) 1. Concept: The Managerial \"Identity ...\"",
+      "retrieved_sources": [
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf"
+      ],
+      "faithfulness": 1.0,
+      "answer_relevance": 0.8433,
+      "context_precision": 1.0,
+      "context_recall": 0.9091,
+      "ragas_score": 0.9381,
+      "guardrail_status": "ANSWERED"
+    },
+    {
+      "id": "eval_02",
+      "question": "What does First-Order Logic (FOL) represent and what are its key components?",
+      "ground_truth": "First-Order Logic (FOL) represents facts, relations, and properties of world entities using constants, variables, predicates, and quantifiers (Universal and Existential).",
+      "answer": "First\u2011Order Logic (also called Predicate Logic) is a formal language for expressing **facts, relations, and properties of entities in the world**.  It does this by combining **symbols that denote objects** (constants), **place\u2011holders for objects** (variables), **predicates that describe properties or relationships** of those objects, and **quantifiers** that specify how widely a statement applies\u2014namely the universal quantifier (\u202f\u2200\u202f) and the existential quantifier (\u202f\u2203\u202f)\u30101\u3011.  \n\nThe **key components** of FOL therefore are:  \n\n* **Constants** \u2013 specific named objects (e.g.,\u202fBluebird)\u30102\u3011  \n* **Variables** \u2013 placeholders that can range over objects (e.g.,\u202fx,\u202ft,\u202fb)\u30102\u3011  \n* **Predicates** \u2013 symbols that assert properties or relations about objects (e.g.,\u202fHorse(x),\u202fSleepsIn(b,\u202ft),\u202fBeside(t,\u202fl))\u30102\u3011  \n* **Quantifiers** \u2013 \u2200 (universal) and \u2203 (existential) that bind variables to indicate \u201cfor all\u201d or \u201cthere exists\u201d\u30101\u3011  \n* **Logical connectives** \u2013 such as implication (\u2192), conjunction (\u2227), disjunction (\u2228), and negation (\u00ac) that combine atomic statements into more complex formulas\u30102\u3011.\n\n\ud83d\udcda Sources & Citations:\n  [1] aisc-sol.pdf (Confidence: 99%)\n      \"c) Write FOL for the following statements: [5 Marks] First-Order Logic (Predicate Logic) represents facts, relations, and properties of world entities using ...\"\n  [2] aisc-sol.pdf (Confidence: 24%)\n      \"Natural Language Statement FOL Representation Predicates & Logic Breakdowns i) Horses, cows, and pigs are mammals. $$\\forall x \\, ((Horse(x) \\lor Cow(x) \\lor...\"",
+      "retrieved_sources": [
+        "aisc-sol.pdf",
+        "aisc-sol.pdf"
+      ],
+      "faithfulness": 0.6667,
+      "answer_relevance": 0.8501,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "ragas_score": 0.8792,
+      "guardrail_status": "ANSWERED"
+    },
+    {
+      "id": "eval_03",
+      "question": "Which managerial skill is most critical for top executives?",
+      "ground_truth": "Conceptual skills are the most critical for top-level executives because they need to see the organization as a whole.",
+      "answer": "The managerial skill that becomes most critical for top\u2011level executives (e.g., CTO or CEO) is **Conceptual skill**\u2014the ability to see the big picture, understand long\u2011term strategic implications, and connect different parts of the organization. At the highest levels the skill distribution is roughly 5\u202f% Technical, 45\u202f% Human, and 50\u202f% Conceptual, making Conceptual the dominant competency for senior leaders\u30102\u3011.\n\n\ud83d\udcda Sources & Citations:\n  [1] Lecture 3 (Notes & QB).pdf (Confidence: 94%)\n      \"identified a long-term market opportunity. o Skill Failed: Technical Skill (or Technical Grounding). While Top Managers don't need to code, they need enough ...\"\n  [2] Lecture 3 (Notes & QB).pdf (Confidence: 94%)\n      \"Application: Most vital at the Top Level (CTO/CEO) for long-term strategic planning. Identify which skill is being used in these scenarios: Scenario A: Negot...\"\n  [3] Lecture 3 (Notes & QB).pdf (Confidence: 83%)\n      \"Concept: Technical, Human, and Conceptual Skills. \uf0b7 Answer: Robert Katz identified three essential managerial skills:\"",
+      "retrieved_sources": [
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf",
+        "Lecture 3 (Notes & QB).pdf"
+      ],
+      "faithfulness": 1.0,
+      "answer_relevance": 0.7755,
+      "context_precision": 0.5833,
+      "context_recall": 0.6364,
+      "ragas_score": 0.7488,
+      "guardrail_status": "ANSWERED"
+    },
+    {
+      "id": "eval_04",
+      "question": "What is the capital of France and what is its current weather?",
+      "answer": "I could not find sufficient information in your uploaded documents to answer that question accurately. Please make sure the relevant document is uploaded or try refining your question.",
+      "faithfulness": 1.0,
+      "answer_relevance": 0.95,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "ragas_score": 0.9875,
+      "guardrail_status": "SAFE_REFUSAL"
+    }
+  ]
+}

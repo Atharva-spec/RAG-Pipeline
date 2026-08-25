@@ -821,6 +821,17 @@ class TestFastAPIServer(unittest.TestCase):
         self.assertEqual(res.json()["status"], "success")
 
 
+class TestSpellCorrector(unittest.TestCase):
+    def test_spelling_corrections(self):
+        from generation.spell_corrector import correct_query_spelling
+        from generation.query_condenser import normalize_query_terms
+
+        self.assertEqual(normalize_query_terms("what is pre procesing"), "what is preprocessing")
+        self.assertEqual(normalize_query_terms("suprvised lerning"), "supervised learning")
+        self.assertEqual(normalize_query_terms("explain descision tree classifcation"), "explain decision tree classification")
+        self.assertEqual(normalize_query_terms("dimenshional modling"), "dimensional modeling")
+
+
 if __name__ == "__main__":
     unittest.main()
 

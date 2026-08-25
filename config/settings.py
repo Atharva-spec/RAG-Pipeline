@@ -9,6 +9,9 @@ load_dotenv()
 # Global HuggingFace Hub / Tokenizers quiet configuration
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["TQDM_DISABLE"] = "1"
 warnings.filterwarnings("ignore", message=".*unauthenticated requests.*")
 warnings.filterwarnings("ignore", module="huggingface_hub")
 logging.getLogger("transformers").setLevel(logging.ERROR)

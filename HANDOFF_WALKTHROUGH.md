@@ -36,7 +36,7 @@ A complete, exhaustive reference guide to the **Enterprise Agentic Hybrid RAG Pi
 ├──────────────────────────┼───────────────────────────────────────────────────────┤
 │ OS & Runtime Support     │ Windows (`.bat`, `.ps1`), macOS & Linux (`./rag`, npm)│
 ├──────────────────────────┼───────────────────────────────────────────────────────┤
-│ Test Coverage            │ 45 Automated Unit Tests (100% Passing)                │
+│ Test Coverage            │ 54 Automated Unit Tests (100% Passing)                │
 └──────────────────────────┴───────────────────────────────────────────────────────┘
 ```
 
@@ -225,7 +225,7 @@ npm run ingest             # Run fast incremental document sync (<50ms)
 npm run rebuild            # Wipe index and rebuild from scratch
 npm run eval               # Run 100% local RAGAS benchmark suite
 npm run calibrate          # Run automated confidence threshold sweep
-npm test                   # Run all 45 automated unit tests
+npm test                   # Run all 54 automated unit tests
 ```
 
 ---
@@ -241,5 +241,10 @@ npm test                   # Run all 45 automated unit tests
    * Server-Sent Events (SSE) token streaming.
    * Multipart file upload endpoint (`POST /v1/ingest/upload`).
 3. **Phase 3: Decoupled Modern Frontend (`RAG-Frontend` repo)**
-   * Next.js 15 / React 19 / TailwindCSS chat interface with live citation previews.
+   * Next.js 15 / React 19 / TailwindCSS NotebookLM-style 3-column studio interface with live citation previews.
    * Document library manager with drag-and-drop upload zone.
+4. **Phase 4: Cross-Platform Mobile App (`RAG-Mobile` repo)**
+   * React Native + Expo Router (SDK 52+) for iOS & Android cross-platform access.
+   * Mobile-native bottom-sheet citation inspector (`@gorhom/bottom-sheet`).
+   * Camera document scanning & direct PDF ingestion.
+   * Biometric authentication (FaceID / TouchID) and offline response caching.

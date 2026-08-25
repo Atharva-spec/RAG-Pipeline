@@ -57,6 +57,16 @@ def _heuristic_condense(question: str, history_text: str, memory: Optional[Conve
     return question.strip()
 
 
+from generation.spell_corrector import correct_query_spelling
+
+
+def normalize_query_terms(text: str) -> str:
+    """
+    Applies dynamic corpus-based compound merging and fuzzy spell correction.
+    """
+    return correct_query_spelling(text.strip())
+
+
 def condense_query(
     question: str,
     memory: Optional[Union[ConversationMemory, str]] = None,
@@ -66,7 +76,7 @@ def condense_query(
     Uses fast heuristic pruning to avoid unnecessary LLM latency when the question
     is already standalone.
     """
-    clean_q = question.strip()
+    clean_q = normalize_query_terms(question.strip())
     if not clean_q:
         return clean_q
 

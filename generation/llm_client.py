@@ -1,8 +1,6 @@
 import logging
 import os
-from typing import Optional
-
-from openai import OpenAI
+from typing import Any, Optional
 
 from config.settings import (
     GROQ_API_KEY,
@@ -14,14 +12,15 @@ from config.settings import (
 
 logger = logging.getLogger(__name__)
 
-_groq_client: Optional[OpenAI] = None
+_groq_client: Optional[Any] = None
 
 
-def _get_groq_client() -> Optional[OpenAI]:
+def _get_groq_client() -> Optional[Any]:
     global _groq_client
     if _groq_client is None:
         api_key = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
         if api_key:
+            from openai import OpenAI
             _groq_client = OpenAI(
                 api_key=api_key,
                 base_url="https://api.groq.com/openai/v1",

@@ -15,6 +15,7 @@ from config.settings import (
     PARENT_CHUNK_OVERLAP,
     PARENT_CHUNK_SIZE,
 )
+from core.cache import get_cached_chunks, set_cached_chunks
 from ingestion.normalizer import compute_content_hash, normalize_text
 
 
@@ -52,10 +53,33 @@ def chunk_hierarchical(
         doc_source = doc["source"]
         doc_text = doc["text"]
         doc_id = doc.get("doc_id", doc_source)
-        doc_hash = doc.get("doc_hash", "")
+        doc_hash = doc.get("doc_hash", "") or compute_content_hash(doc_text)
         file_type = doc.get("file_type", Path(doc_source).suffix.lower())
         file_size = doc.get("file_size_bytes", 0)
         last_modified = doc.get("last_modified", "")
+
+        # Check Redis Chunk Cache
+        cached_chunks = get_cached_chunks(
+            doc_hash,
+            strategy="hierarchical",
+            chunk_size=child_size,
+            chunk_overlap=child_overlap,
+        )
+        if cached_chunks:
+            valid_chunks = []
+            for ch in cached_chunks:
+                c_hash = ch.get("content_hash") or compute_content_hash(ch.get("text", ""))
+                if deduplicate:
+                    if c_hash in seen_content_hashes:
+                        skipped_duplicates += 1
+                        continue
+                    seen_content_hashes.add(c_hash)
+                valid_chunks.append(ch)
+            _save_chunks(doc_source, cached_chunks)
+            all_chunks.extend(valid_chunks)
+            print(f"  [Redis Chunk Cache HIT] {doc_source} ──► {len(valid_chunks)} chunks loaded from Redis (0ms)")
+            continue
+
 
         parent_splits = parent_splitter.split_text(doc_text)
         doc_chunks = []
@@ -110,6 +134,15 @@ def chunk_hierarchical(
         for ch in doc_chunks:
             ch["total_chunks"] = len(doc_chunks)
 
+        # Cache in Redis
+        set_cached_chunks(
+            doc_hash,
+            doc_chunks,
+            strategy="hierarchical",
+            chunk_size=child_size,
+            chunk_overlap=child_overlap,
+        )
+
         _save_chunks(doc_source, doc_chunks)
         all_chunks.extend(doc_chunks)
         print(f"  [Hierarchical Chunking] {doc_source} ──► {len(parent_splits)} parents, {len(doc_chunks)} unique child chunks")
@@ -144,10 +177,33 @@ def chunk_semantic_sections(
         doc_source = doc["source"]
         doc_text = doc["text"]
         doc_id = doc.get("doc_id", doc_source)
-        doc_hash = doc.get("doc_hash", "")
+        doc_hash = doc.get("doc_hash", "") or compute_content_hash(doc_text)
         file_type = doc.get("file_type", Path(doc_source).suffix.lower())
         file_size = doc.get("file_size_bytes", 0)
         last_modified = doc.get("last_modified", "")
+
+        # Check Redis Chunk Cache
+        cached_chunks = get_cached_chunks(
+            doc_hash,
+            strategy="semantic_section",
+            chunk_size=max_chunk_size,
+            chunk_overlap=overlap,
+        )
+        if cached_chunks:
+            valid_chunks = []
+            for ch in cached_chunks:
+                c_hash = ch.get("content_hash") or compute_content_hash(ch.get("text", ""))
+                if deduplicate:
+                    if c_hash in seen_content_hashes:
+                        skipped_duplicates += 1
+                        continue
+                    seen_content_hashes.add(c_hash)
+                valid_chunks.append(ch)
+            _save_chunks(doc_source, cached_chunks)
+            all_chunks.extend(valid_chunks)
+            print(f"  [Redis Chunk Cache HIT] {doc_source} ──► {len(valid_chunks)} chunks loaded from Redis (0ms)")
+            continue
+
 
         raw_sections = re.split(header_pattern, doc_text)
         sections = []
@@ -248,6 +304,15 @@ def chunk_semantic_sections(
         for ch in doc_chunks:
             ch["total_chunks"] = len(doc_chunks)
 
+        # Cache in Redis
+        set_cached_chunks(
+            doc_hash,
+            doc_chunks,
+            strategy="semantic_section",
+            chunk_size=max_chunk_size,
+            chunk_overlap=overlap,
+        )
+
         _save_chunks(doc_source, doc_chunks)
         all_chunks.extend(doc_chunks)
         print(f"  [Semantic Section Chunking] {doc_source} ──► {len(doc_chunks)} chunks")
@@ -278,13 +343,37 @@ def chunk_recursive(
 
     for doc in documents:
         doc_source = doc["source"]
+        doc_text = doc["text"]
         doc_id = doc.get("doc_id", doc_source)
-        doc_hash = doc.get("doc_hash", "")
+        doc_hash = doc.get("doc_hash", "") or compute_content_hash(doc_text)
         file_type = doc.get("file_type", Path(doc_source).suffix.lower())
         file_size = doc.get("file_size_bytes", 0)
         last_modified = doc.get("last_modified", "")
 
-        splits = splitter.split_text(doc["text"])
+        # Check Redis Chunk Cache
+        cached_chunks = get_cached_chunks(
+            doc_hash,
+            strategy="recursive",
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        if cached_chunks:
+            valid_chunks = []
+            for ch in cached_chunks:
+                c_hash = ch.get("content_hash") or compute_content_hash(ch.get("text", ""))
+                if deduplicate:
+                    if c_hash in seen_content_hashes:
+                        skipped_duplicates += 1
+                        continue
+                    seen_content_hashes.add(c_hash)
+                valid_chunks.append(ch)
+            _save_chunks(doc_source, cached_chunks)
+            all_chunks.extend(valid_chunks)
+            print(f"  [Redis Chunk Cache HIT] {doc_source} ──► {len(valid_chunks)} chunks loaded from Redis (0ms)")
+            continue
+
+
+        splits = splitter.split_text(doc_text)
         doc_chunks = []
 
         for i, s in enumerate(splits):
@@ -323,6 +412,15 @@ def chunk_recursive(
         for ch in doc_chunks:
             ch["total_chunks"] = len(doc_chunks)
 
+        # Cache in Redis
+        set_cached_chunks(
+            doc_hash,
+            doc_chunks,
+            strategy="recursive",
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+
         _save_chunks(doc_source, doc_chunks)
         all_chunks.extend(doc_chunks)
         print(f"  [Recursive Chunking] {doc_source} ──► {len(doc_chunks)} chunks")
@@ -331,6 +429,7 @@ def chunk_recursive(
         print(f"  [Deduplication] Filtered out {skipped_duplicates} duplicate chunk(s)")
 
     return all_chunks
+
 
 
 def chunk_documents(

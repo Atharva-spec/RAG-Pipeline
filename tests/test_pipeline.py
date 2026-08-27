@@ -662,26 +662,37 @@ class TestConfidenceCalibration(unittest.TestCase):
 
 class TestRedisCaching(unittest.TestCase):
     @patch("core.cache.get_redis_client")
-    def test_answer_cache_hit_and_miss(self, mock_client):
+    def test_chunk_cache_hit_and_miss(self, mock_client):
         mock_redis = MagicMock()
         mock_client.return_value = mock_redis
+        from core.cache import get_cached_chunks, set_cached_chunks
 
         # Test cache miss
         mock_redis.get.return_value = None
-        from core.cache import get_cached_answer, set_cached_answer
-        res = get_cached_answer("test question")
+        res = get_cached_chunks("doc_hash_123", strategy="hierarchical")
         self.assertIsNone(res)
 
         # Test cache set
-        set_cached_answer("test question", {"answer": "cached answer", "confidence_score": 0.95})
+        sample_chunks = [{"id": "c1", "text": "chunk text", "strategy": "hierarchical"}]
+        set_cached_chunks("doc_hash_123", sample_chunks, strategy="hierarchical")
         mock_redis.set.assert_called_once()
 
         # Test cache hit
-        mock_redis.get.return_value = json.dumps({"answer": "cached answer", "confidence_score": 0.95})
-        hit = get_cached_answer("test question")
+        mock_redis.get.return_value = json.dumps(sample_chunks)
+        hit = get_cached_chunks("doc_hash_123", strategy="hierarchical")
         self.assertIsNotNone(hit)
-        self.assertEqual(hit["answer"], "cached answer")
-        self.assertTrue(hit["cached"])
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0]["id"], "c1")
+
+    @patch("core.cache.get_redis_client")
+    def test_chunk_cache_invalidation(self, mock_client):
+        mock_redis = MagicMock()
+        mock_client.return_value = mock_redis
+        from core.cache import invalidate_cached_chunks
+
+        invalidate_cached_chunks("doc_hash_123")
+        self.assertTrue(mock_redis.delete.called)
+
 
     @patch("core.cache.get_redis_client")
     def test_vector_cache_hit_and_miss(self, mock_client):

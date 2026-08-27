@@ -73,28 +73,82 @@ def _hash_key(prefix: str, content: str) -> str:
 
 
 # =========================================================================
-# Tier 1: Answer & Query Response Cache
+# Tier 1: Document Chunk Cache (Pre-computed Hierarchical/Semantic Chunks)
 # =========================================================================
 
-def get_cached_answer(query: str, scope_hash: str = "global") -> Optional[Dict[str, Any]]:
+def get_cached_chunks(
+    doc_hash: str,
+    strategy: str = "hierarchical",
+    chunk_size: Optional[int] = None,
+    chunk_overlap: Optional[int] = None,
+) -> Optional[List[Dict[str, Any]]]:
     """
-    Retrieves cached RAG response for a normalized query string.
-    Returns None on cache miss or Redis offline.
+    Retrieves cached pre-computed document chunks from Redis by document hash and chunking strategy.
+    Returns None on cache miss or when Redis is offline.
     """
     client = get_redis_client()
-    if not client:
+    if not client or not doc_hash:
         return None
 
     try:
-        key = _hash_key("rag:answer", f"{scope_hash}:{query}")
+        sub_key = f"{doc_hash}:{strategy}:{chunk_size or 0}:{chunk_overlap or 0}"
+        key = _hash_key("rag:chunks", sub_key)
         raw = client.get(key)
         if raw:
-            data = json.loads(raw)
-            data["cached"] = True
-            return data
+            chunks = json.loads(raw)
+            if isinstance(chunks, list):
+                return chunks
     except Exception as e:
-        logger.debug(f"Tier-1 cache read failed: {e}")
+        logger.debug(f"Tier-1 chunk cache read failed: {e}")
 
+    return None
+
+
+def set_cached_chunks(
+    doc_hash: str,
+    chunks: List[Dict[str, Any]],
+    strategy: str = "hierarchical",
+    chunk_size: Optional[int] = None,
+    chunk_overlap: Optional[int] = None,
+    ttl: int = REDIS_CACHE_TTL_SECONDS,
+):
+    """
+    Caches pre-computed document chunks and metadata in Redis.
+    """
+    client = get_redis_client()
+    if not client or not doc_hash or not chunks:
+        return
+
+    try:
+        sub_key = f"{doc_hash}:{strategy}:{chunk_size or 0}:{chunk_overlap or 0}"
+        key = _hash_key("rag:chunks", sub_key)
+        client.set(key, json.dumps(chunks), ex=ttl)
+    except Exception as e:
+        logger.debug(f"Tier-1 chunk cache write failed: {e}")
+
+
+def invalidate_cached_chunks(doc_hash: str):
+    """
+    Invalidates all cached chunks for a specific document hash in Redis.
+    """
+    client = get_redis_client()
+    if not client or not doc_hash:
+        return
+
+    try:
+        # Delete direct strategy keys or scan matching keys
+        for strategy in ("hierarchical", "semantic_section", "recursive", "structural"):
+            for cs in (0, 400, 800, 2000):
+                for co in (0, 80, 150, 200):
+                    sub_key = f"{doc_hash}:{strategy}:{cs}:{co}"
+                    key = _hash_key("rag:chunks", sub_key)
+                    client.delete(key)
+    except Exception as e:
+        logger.debug(f"Tier-1 chunk cache invalidation failed: {e}")
+
+
+# Compatibility helpers for deprecated answer cache
+def get_cached_answer(query: str, scope_hash: str = "global") -> Optional[Dict[str, Any]]:
     return None
 
 
@@ -104,20 +158,7 @@ def set_cached_answer(
     scope_hash: str = "global",
     ttl: int = REDIS_CACHE_TTL_SECONDS,
 ):
-    """
-    Caches RAG query answer and citation payload in Redis.
-    """
-    client = get_redis_client()
-    if not client:
-        return
-
-    try:
-        key = _hash_key("rag:answer", f"{scope_hash}:{query}")
-        payload = dict(answer_payload)
-        payload.pop("cached", None)
-        client.set(key, json.dumps(payload), ex=ttl)
-    except Exception as e:
-        logger.debug(f"Tier-1 cache write failed: {e}")
+    pass
 
 
 # =========================================================================

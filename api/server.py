@@ -27,9 +27,8 @@ from config.settings import (
 from core.cache import (
     clear_cached_session,
     get_cache_stats,
-    get_cached_answer,
+    invalidate_cached_chunks,
     is_redis_available,
-    set_cached_answer,
 )
 from generation.citation_resolver import resolve_citations
 from generation.guardrails import (
@@ -189,13 +188,6 @@ def execute_query(payload: QueryRequest):
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    # 0. Check Tier-1 Redis Answer Cache
-    if payload.use_cache and session_id == "default":
-        cached_result = get_cached_answer(question)
-        if cached_result:
-            cached_result["telemetry"]["latency_ms"] = round((time.time() - t0) * 1000, 2)
-            return cached_result
-
     # 1. Input Safety Guardrail
     is_safe, refusal_reason = check_input_safety(question)
     if not is_safe:
@@ -338,11 +330,8 @@ def execute_query(payload: QueryRequest):
         refusal=False,
     )
 
-    # Cache answer in Redis
-    if payload.use_cache and session_id == "default":
-        set_cached_answer(question, response_payload.model_dump())
-
     return response_payload
+
 
 
 @app.post("/v1/query/stream")
@@ -543,29 +532,27 @@ async def upload_document(file: UploadFile = File(...)):
 @app.delete("/v1/documents/{filename}")
 def delete_document(filename: str):
     """
-    Deletes a document from disk and purges its chunks from PostgreSQL.
+    Deletes a document from disk, purges its chunks from PostgreSQL,
+    and invalidates its chunk cache in Redis.
     """
     filepath = os.path.join(DATA_RAW_DIR, filename)
 
     if os.path.exists(filepath):
         os.remove(filepath)
 
-    # Purge from PostgreSQL
+    # Purge from PostgreSQL and invalidate Redis chunk cache
     try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "DELETE FROM document_chunks WHERE source = %s;",
-                    (filename,),
-                )
-                conn.commit()
+        from ingestion.incremental_ingest import delete_document_chunks
+        deleted_count = delete_document_chunks(filename)
     except Exception as e:
         logger.error(f"Error purging chunks for {filename}: {e}")
+        deleted_count = 0
 
     return {
         "status": "success",
-        "message": f"Document '{filename}' and all its indexed chunks have been deleted.",
+        "message": f"Document '{filename}' and {deleted_count} indexed chunks have been deleted.",
     }
+
 
 
 # =========================================================================

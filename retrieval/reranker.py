@@ -118,6 +118,34 @@ def _predict_onnx(pairs: List[Tuple[str, str]]) -> List[float]:
     return [float(x) for x in logits]
 
 
+def normalize_query_for_reranker(query: str) -> str:
+    """
+    Normalizes colloquial idioms (e.g. 'full form') so cross-encoders
+    (trained on standard MS-MARCO corpora) do not artificially penalize acronym queries.
+    """
+    import re
+    q = query.strip()
+    # "full form of <TERM>"
+    q = re.sub(
+        r"(?i)\b(?:what is (?:the )?)?full[-\s]*form of\s+([a-zA-Z0-9_\-]+)\b",
+        r"what does \1 stand for (\1 acronym meaning)",
+        q,
+    )
+    # "<TERM> full form"
+    q = re.sub(
+        r"(?i)\b([a-zA-Z0-9_\-]+)\s+full[-\s]*form\b",
+        r"what does \1 stand for (\1 acronym meaning)",
+        q,
+    )
+    # Generic "full form"
+    q = re.sub(
+        r"(?i)\bfull[-\s]*form\b",
+        r"acronym meaning definition",
+        q,
+    )
+    return q
+
+
 def rerank_chunks(
     query: str,
     chunks: list[dict],
@@ -126,7 +154,8 @@ def rerank_chunks(
     if not chunks:
         return []
 
-    pairs = [(query, c["text"]) for c in chunks]
+    scoring_query = normalize_query_for_reranker(query)
+    pairs = [(scoring_query, c["text"]) for c in chunks]
 
     scores: List[float] = []
     if USE_ONNX_RERANKER:

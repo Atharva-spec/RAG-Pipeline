@@ -78,19 +78,40 @@ def load_documents(raw_dir: str = DATA_RAW_DIR) -> List[dict]:
 def _parse_with_unstructured(path: Path) -> str:
     """
     Partitions documents into layout-aware structured elements (titles, narrative text, tables, lists).
+    Includes automatic fallback to pypdf for PDFs if unstructured parser fails or returns empty text.
     """
-    elements = partition(
-        filename=str(path),
-        strategy="fast",
-    )
-    
-    parts = []
-    for el in elements:
-        t = (el.text or "").strip()
-        if t:
-            parts.append(t)
-            
-    return "\n\n".join(parts)
+    try:
+        elements = partition(
+            filename=str(path),
+            strategy="fast",
+        )
+        parts = []
+        for el in elements:
+            t = (el.text or "").strip()
+            if t:
+                parts.append(t)
+        if parts:
+            return "\n\n".join(parts)
+    except Exception as e:
+        print(f"  [DocumentLoader Warning] Unstructured parser failed on '{path.name}': {e}")
+
+    # Robust multi-engine fallback for PDFs
+    if path.suffix.lower() == ".pdf":
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(str(path))
+            pages_text = []
+            for i, page in enumerate(reader.pages):
+                extracted = page.extract_text()
+                if extracted and extracted.strip():
+                    pages_text.append(f"Page {i+1}\n\n{extracted.strip()}")
+            if pages_text:
+                print(f"  [DocumentLoader] Fallback parser (pypdf) extracted {len(pages_text)} pages for '{path.name}'.")
+                return "\n\n".join(pages_text)
+        except Exception as pe:
+            print(f"  [DocumentLoader Error] pypdf fallback also failed on '{path.name}': {pe}")
+
+    return ""
 
 
 def _save_processed(stem: str, text: str):

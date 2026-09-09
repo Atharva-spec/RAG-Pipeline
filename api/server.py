@@ -307,8 +307,8 @@ def execute_query(payload: QueryRequest):
             source=c.get("source", "Unknown"),
             page=c.get("page"),
             confidence_score=c.get("confidence_score", top_confidence),
-            exact_quote=c.get("quote", ""),
-            parent_context=c.get("text", ""),
+            exact_quote=c.get("exact_quote") or c.get("excerpt") or c.get("quote", ""),
+            parent_context=c.get("parent_context") or c.get("text", ""),
         )
         for idx, c in enumerate(citations or qualified_chunks)
     ]
@@ -435,8 +435,8 @@ def execute_query_stream(payload: QueryRequest):
                 "source": c.get("source", "Unknown"),
                 "page": c.get("page"),
                 "confidence_score": c.get("confidence_score", top_confidence),
-                "exact_quote": c.get("quote", ""),
-                "parent_context": c.get("text", ""),
+                "exact_quote": c.get("exact_quote") or c.get("excerpt") or c.get("quote", ""),
+                "parent_context": c.get("parent_context") or c.get("text", ""),
             }
             for idx, c in enumerate(citations or qualified_chunks)
         ]
@@ -467,8 +467,8 @@ def get_indexed_documents():
                 cur.execute(
                     "SELECT source, COUNT(*) FROM document_chunks GROUP BY source;"
                 )
-                for source, count in cur.fetchall():
-                    chunk_counts_by_source[source] = count
+                for row in cur.fetchall():
+                    chunk_counts_by_source[row["source"]] = row["count"]
     except Exception as e:
         logger.debug(f"Could not query chunk counts from DB: {e}")
 
@@ -517,15 +517,18 @@ async def upload_document(file: UploadFile = File(...)):
 
     # Trigger smart incremental sync
     try:
-        sync_incremental(DATA_RAW_DIR, verbose=False)
+        sync_res = sync_incremental(DATA_RAW_DIR, verbose=True)
+        chunks_added = sync_res.get("chunks_added", 0)
     except Exception as e:
-        logger.error(f"Error during document indexing: {e}")
+        logger.error(f"Error during document indexing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Document upload failed during indexing: {e}")
 
     return {
         "status": "success",
-        "message": f"Document '{filename}' uploaded and indexed successfully.",
+        "message": f"Document '{filename}' uploaded and indexed successfully ({chunks_added} chunks).",
         "filename": filename,
         "size_bytes": os.path.getsize(filepath),
+        "chunks_indexed": chunks_added,
     }
 
 

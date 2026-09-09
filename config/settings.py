@@ -1,8 +1,11 @@
 import logging
 import os
+from pathlib import Path
 import warnings
 
 from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
 
@@ -55,7 +58,7 @@ TOP_K = 8
 RERANK_TOP_N = 3
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 USE_ONNX_RERANKER = os.getenv("USE_ONNX_RERANKER", "true").lower() in ("true", "1", "yes")
-ONNX_MODEL_DIR = os.getenv("ONNX_MODEL_DIR", "data/models/reranker_onnx")
+ONNX_MODEL_DIR = os.getenv("ONNX_MODEL_DIR", str(BASE_DIR / "data" / "models" / "reranker_onnx"))
 HYBRID_SEARCH_ENABLED = True
 RRF_K = 60  # Reciprocal Rank Fusion constant
 
@@ -92,9 +95,9 @@ REDIS_CACHE_TTL_SECONDS = int(os.getenv("REDIS_CACHE_TTL_SECONDS", "86400"))  # 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
 
-# Paths
-DATA_RAW_DIR = "data/raw"
-DATA_PROCESSED_DIR = "data/processed"
-DATA_CHUNKS_DIR = "data/chunks"
+# Absolute Paths anchored to project root
+DATA_RAW_DIR = os.getenv("DATA_RAW_DIR", str(BASE_DIR / "data" / "raw"))
+DATA_PROCESSED_DIR = os.getenv("DATA_PROCESSED_DIR", str(BASE_DIR / "data" / "processed"))
+DATA_CHUNKS_DIR = os.getenv("DATA_CHUNKS_DIR", str(BASE_DIR / "data" / "chunks"))
 
 

@@ -194,6 +194,10 @@ def sanitize_output(answer: str) -> str:
     for pattern, replacement in SECRET_LEAK_PATTERNS:
         sanitized = re.sub(pattern, replacement, sanitized)
 
+    # 3. Normalize model-specific citation artifacts (e.g. OpenAI 【1†L1-L4】 or 【2】 -> [1], [2])
+    sanitized = re.sub(r"【(\d+)(?:[†^][^】]*)?】", r"[\1]", sanitized)
+    sanitized = re.sub(r"\[(\d+)\s*[†^][^\]]*\]", r"[\1]", sanitized)
+
     return sanitized.strip()
 
 

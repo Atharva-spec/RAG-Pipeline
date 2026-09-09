@@ -7,11 +7,13 @@ def extract_cited_indices(text: str, max_index: int) -> List[int]:
     Extracts citation numbers from text (e.g. [1], [2], [1, 2], [1][2], [Source 1]).
     Returns a sorted list of unique 1-based chunk indices that exist in the retrieved context.
     """
-    # Matches patterns like [1], [2], [1, 2], [1,2,3], [Source: 1], [Source 1]
+    # Matches patterns like [1], [2], [1, 2], [1,2,3], [Source: 1], [Source 1], 【1†L1-L4】, 【2】
     patterns = [
         r'\[(\d+)\]',
         r'\[(?:Source|Doc|Ref)\s*:?\s*(\d+)\]',
         r'\[(\d+(?:\s*,\s*\d+)+)\]',
+        r'【(\d+)(?:[†^][^】]*)?】',
+        r'\[(\d+)\s*[†^][^\]]*\]',
     ]
 
     indices = set()
@@ -77,6 +79,10 @@ def resolve_citations(answer_text: str, chunks: List[dict]) -> Tuple[List[dict],
             "confidence_score": conf_score,
             "confidence_display": conf_pct,
             "excerpt": excerpt,
+            "exact_quote": excerpt,
+            "quote": excerpt,
+            "text": text_body,
+            "parent_context": chunk.get("parent_text", text_body),
             "strategy": chunk.get("strategy", "hierarchical"),
         }
         citations.append(citation_entry)

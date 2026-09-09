@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from config.settings import DATA_RAW_DIR, POSTGRES_TABLE
+from core.cache import invalidate_cached_chunks
 from ingestion.chunker import chunk_documents
 from ingestion.document_loader import SUPPORTED_EXTENSIONS, load_documents
 from ingestion.normalizer import compute_file_hash
@@ -39,21 +40,37 @@ def get_indexed_document_hashes() -> Dict[str, str]:
         return {}
 
 
-def delete_document_chunks(doc_source: str) -> int:
+def delete_document_chunks(doc_source: str, doc_hash: Optional[str] = None) -> int:
     """
-    Deletes all chunks associated with a specific document source from PostgreSQL.
+    Deletes all chunks associated with a specific document source from PostgreSQL
+    and invalidates its pre-computed chunk cache in Redis.
     """
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                if not doc_hash:
+                    cur.execute(
+                        f"SELECT doc_hash FROM {POSTGRES_TABLE} WHERE source = %s LIMIT 1;",
+                        (doc_source,),
+                    )
+                    row = cur.fetchone()
+                    if row and row.get("doc_hash"):
+                        doc_hash = row["doc_hash"]
+
                 cur.execute(
                     f"DELETE FROM {POSTGRES_TABLE} WHERE source = %s;",
                     (doc_source,),
                 )
-                return cur.rowcount
+                deleted_rows = cur.rowcount
+
+                if doc_hash:
+                    invalidate_cached_chunks(doc_hash)
+
+                return deleted_rows
     except Exception as e:
         print(f"  [Incremental Ingest Error] Failed to delete chunks for '{doc_source}': {e}")
         return 0
+
 
 
 def classify_files(

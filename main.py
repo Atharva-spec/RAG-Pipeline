@@ -13,7 +13,7 @@ from generation.guardrails import (
 from generation.llm_client import get_answer
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
-from generation.query_condenser import condense_query
+from generation.rephraser_agent import rephrase_query
 from retrieval.health_check import run_preflight_check
 from retrieval.reranker import rerank_chunks
 from retrieval.retriever import retrieve_chunks
@@ -69,8 +69,8 @@ def query(
         print(f"\nAnswer:\n{intent_reply}\n")
         return intent_reply
 
-    # 3. Agentic Query Condensation (Resolve references using conversation memory)
-    search_query = condense_query(question, memory=memory)
+    # 3. Rephraser Agent (Query reformulation, typo repair & context resolution)
+    search_query = rephrase_query(question, memory=memory)
 
     # 4. Hybrid Retrieval from OpenSearch (Dense Vector + BM25 Lexical with RRF)
     raw_chunks = retrieve_chunks(search_query, k=TOP_K)

@@ -7,7 +7,7 @@ SYSTEM_PROMPT = (
     "using ONLY the provided document context below.\n\n"
     "Mandatory Guidelines:\n"
     "1. Ground your answer strictly in the provided Context chunks.\n"
-    "2. Citation Requirements: Every factual statement or claim MUST be followed by the bracketed number of the context passage it came from, e.g. [1], [2], or [1, 2]. Do not state facts without citations.\n"
+    "2. Citation Requirements: Every factual statement or claim MUST be followed by the bracketed number of the context passage it came from, e.g. [1], [2], or [1, 2]. Strictly use standard ASCII square brackets like [1]. NEVER use unicode brackets like 【...】 or line markers like †L1-L4. Do not state facts without citations.\n"
     "3. If the context does not contain enough information to answer the question, clearly state: "
     '"I don\'t have enough information in the provided documents to answer that."\n'
     "4. Maintain a professional, concise tone. Do not speculate or invent facts.\n"

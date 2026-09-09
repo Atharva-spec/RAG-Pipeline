@@ -477,7 +477,7 @@ class TestMemoryAndCondenser(unittest.TestCase):
         res = condense_query(standalone_q, memory=mem)
         self.assertEqual(res, standalone_q)
 
-    @patch("generation.query_condenser.get_answer")
+    @patch("generation.rephraser_agent.get_answer")
     def test_condenser_referential_query_calls_llm(self, mock_get_answer):
         mock_get_answer.return_value = "What are the advantages of transformer models?"
         referential_q = "What are its main advantages?"
@@ -662,26 +662,37 @@ class TestConfidenceCalibration(unittest.TestCase):
 
 class TestRedisCaching(unittest.TestCase):
     @patch("core.cache.get_redis_client")
-    def test_answer_cache_hit_and_miss(self, mock_client):
+    def test_chunk_cache_hit_and_miss(self, mock_client):
         mock_redis = MagicMock()
         mock_client.return_value = mock_redis
+        from core.cache import get_cached_chunks, set_cached_chunks
 
         # Test cache miss
         mock_redis.get.return_value = None
-        from core.cache import get_cached_answer, set_cached_answer
-        res = get_cached_answer("test question")
+        res = get_cached_chunks("doc_hash_123", strategy="hierarchical")
         self.assertIsNone(res)
 
         # Test cache set
-        set_cached_answer("test question", {"answer": "cached answer", "confidence_score": 0.95})
+        sample_chunks = [{"id": "c1", "text": "chunk text", "strategy": "hierarchical"}]
+        set_cached_chunks("doc_hash_123", sample_chunks, strategy="hierarchical")
         mock_redis.set.assert_called_once()
 
         # Test cache hit
-        mock_redis.get.return_value = json.dumps({"answer": "cached answer", "confidence_score": 0.95})
-        hit = get_cached_answer("test question")
+        mock_redis.get.return_value = json.dumps(sample_chunks)
+        hit = get_cached_chunks("doc_hash_123", strategy="hierarchical")
         self.assertIsNotNone(hit)
-        self.assertEqual(hit["answer"], "cached answer")
-        self.assertTrue(hit["cached"])
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0]["id"], "c1")
+
+    @patch("core.cache.get_redis_client")
+    def test_chunk_cache_invalidation(self, mock_client):
+        mock_redis = MagicMock()
+        mock_client.return_value = mock_redis
+        from core.cache import invalidate_cached_chunks
+
+        invalidate_cached_chunks("doc_hash_123")
+        self.assertTrue(mock_redis.delete.called)
+
 
     @patch("core.cache.get_redis_client")
     def test_vector_cache_hit_and_miss(self, mock_client):
@@ -821,17 +832,66 @@ class TestFastAPIServer(unittest.TestCase):
         self.assertEqual(res.json()["status"], "success")
 
 
-class TestSpellCorrector(unittest.TestCase):
-    def test_spelling_corrections(self):
-        from generation.spell_corrector import correct_query_spelling
+class TestRephraserAgent(unittest.TestCase):
+    @patch("generation.rephraser_agent.get_answer")
+    def test_rephrase_query_typo_correction(self, mock_get_answer):
+        from generation.rephraser_agent import rephrase_query
         from generation.query_condenser import normalize_query_terms
 
+        mock_get_answer.side_effect = lambda messages: {
+            "what is pre procesing": "what is preprocessing",
+            "suprvised lerning": "supervised learning",
+            "explain descision tree classifcation": "explain decision tree classification",
+            "dimenshional modling": "dimensional modeling",
+        }.get(
+            messages[1]["content"].replace("User Question: ", "").replace("\n\nOptimized Search Query:", "").strip(),
+            "rephrased query",
+        )
+
         self.assertEqual(normalize_query_terms("what is pre procesing"), "what is preprocessing")
-        self.assertEqual(normalize_query_terms("suprvised lerning"), "supervised learning")
-        self.assertEqual(normalize_query_terms("explain descision tree classifcation"), "explain decision tree classification")
-        self.assertEqual(normalize_query_terms("dimenshional modling"), "dimensional modeling")
+        self.assertEqual(rephrase_query("suprvised lerning"), "supervised learning")
+        self.assertEqual(rephrase_query("explain descision tree classifcation"), "explain decision tree classification")
+        self.assertEqual(rephrase_query("dimenshional modling"), "dimensional modeling")
+
+    @patch("generation.rephraser_agent.get_answer")
+    def test_rephrase_conversational_followup(self, mock_get_answer):
+        from generation.rephraser_agent import rephrase_query
+
+        mock_get_answer.return_value = "What are the advantages of transformer models?"
+        mem = ConversationMemory()
+        mem.add_turn("What is transformer?", "A neural network architecture.")
+
+        rephrased = rephrase_query("What are its main advantages?", memory=mem)
+        self.assertEqual(rephrased, "What are the advantages of transformer models?")
+        mock_get_answer.assert_called()
+
+    def test_rephrase_empty_and_passthrough(self):
+        from generation.rephraser_agent import rephrase_query
+
+        self.assertEqual(rephrase_query(""), "")
+        self.assertEqual(rephrase_query("   "), "")
+
+    def test_rephrase_heuristic_fallback_on_error(self):
+        from generation.rephraser_agent import RephraserAgent
+
+        agent = RephraserAgent()
+        mem = ConversationMemory()
+        mem.add_turn("What is PostgreSQL?", "An open-source relational database.")
+
+        # Force fallback by mocking failure
+        fallback_res = agent._heuristic_fallback("Can you please tell me what about its performance?", memory=mem)
+        self.assertIn("performance", fallback_res)
+        self.assertNotIn("Can you please tell me", fallback_res)
+
+    def test_spell_corrector_backwards_compatibility(self):
+        from generation.spell_corrector import correct_query_spelling
+
+        with patch("generation.rephraser_agent.get_answer", return_value="supervised learning"):
+            res = correct_query_spelling("suprvised lerning")
+            self.assertEqual(res, "supervised learning")
 
 
 if __name__ == "__main__":
     unittest.main()
+
 

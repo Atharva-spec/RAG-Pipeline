@@ -165,7 +165,8 @@ RAG-pipeline/
 ├── generation/
 │   ├── guardrails.py            # 5-layer safety & prompt injection defense
 │   ├── memory.py                # Session conversation memory manager
-│   ├── query_condenser.py       # Fast heuristic & LLM query condensation
+│   ├── rephraser_agent.py       # Rephraser Agent for typos, noise stripping & context resolution
+│   ├── query_condenser.py       # Fast heuristic & LLM query condensation wrapper
 │   ├── prompt_builder.py        # Context builder with parent deduplication
 │   ├── citation_resolver.py     # Inline quote & transparent confidence resolver
 │   └── llm_client.py            # High-Speed Cloud LLM Client (Groq)

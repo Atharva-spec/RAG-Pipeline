@@ -15,9 +15,10 @@ REPHRASER_SYSTEM_PROMPT = (
     "1. Correct all spelling mistakes, typos, phonetic errors, and malformed compounds (e.g., 'suprvised lerning' -> 'supervised learning', 'pre procesing' -> 'preprocessing', 'descision tree classifcation' -> 'decision tree classification').\n"
     "2. Normalize colloquial acronym expansion queries (e.g., 'full form of X', 'X full form', 'what is X in full', 'what does X stand for') into search phrases like 'What does X stand for? (X acronym expansion and definition)'.\n"
     "3. If chat history is provided, resolve all pronouns (e.g., 'it', 'its', 'they', 'them', 'this', 'that', 'the former') and follow-up references (e.g. 'full form?', 'advantages?', 'types?') into a complete, standalone query integrating the previous topic.\n"
-    "4. Strip conversational filler (e.g., 'can you please explain', 'i want to know about', 'tell me') while preserving all core technical terms, domain entities, and search intent.\n"
-    "5. Do NOT answer the question.\n"
-    "6. Output ONLY the rephrased search query without quotes, markdown formatting, or explanations."
+    "4. Strip conversational filler (e.g., 'can you please explain', 'i want to know about', 'tell me', 'can you tell me about') while preserving all core technical terms, domain entities, and search intent.\n"
+    "5. CRITICAL: Do NOT invent, append, or hallucinate extra search keywords, metadata terms, or encyclopedic terms not implied by the user (e.g., do NOT expand 'neem' into 'Neem definition, properties, uses, and benefits'; keep entity searches concise and focused).\n"
+    "6. Do NOT answer the question.\n"
+    "7. Output ONLY the rephrased search query without quotes, markdown formatting, or explanations."
 )
 
 _REFERENTIAL_REGEX = re.compile(
@@ -30,10 +31,52 @@ _SHORT_FOLLOWUP_REGEX = re.compile(
     re.IGNORECASE,
 )
 
-_CONVERSATIONAL_FILLER_REGEX = re.compile(
-    r"^(can you please |could you please |please |can you |could you |tell me |i want to know |i would like to know |help me understand |explain to me )\s*",
+_TRAILING_FILLER_REGEX = re.compile(
+    r"[\s,]+(?:to me|for me|please|can you|could you|if possible|as well|right now|currently)\s*\??$",
     re.IGNORECASE,
 )
+
+_LEADING_CONVERSATIONAL_FRAMES = [
+    r"^(?:can you (?:please )?(?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?)\s+",
+    r"^(?:could you (?:please )?(?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?)\s+",
+    r"^(?:please (?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?)\s+",
+    r"^(?:tell me(?: more)?(?: about| regarding| on)?)\s+",
+    r"^(?:talk (?:to me )?about)\s+",
+    r"^(?:explain to me(?: about)?)\s+",
+    r"^(?:describe to me(?: about)?)\s+",
+    r"^(?:what can you tell me(?: about| regarding)?)\s+",
+    r"^(?:what do you know about)\s+",
+    r"^(?:what about|how about)\s+",
+    r"^(?:i (?:just )?(?:want|would like|wish) to know(?: more)?(?: about| on| regarding)?)\s+",
+    r"^(?:give me(?: some)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?)\s+",
+    r"^(?:information (?:about|on|regarding))\s+",
+    r"^(?:details (?:about|on|regarding))\s+",
+    r"^(?:brief (?:me on|about))\s+",
+    r"^(?:help me understand(?: about)?)\s+",
+    r"^(?:(?:the )?(?:meaning|definition|concept|overview|summary|details)(?: and (?:uses?|applications?|benefits?))? (?:of|for|about))\s+",
+    r"^(?:(?:the )?(?:uses?|applications?|benefits?)(?: and (?:meaning|definition|concept))? (?:of|for|about))\s+",
+    r"^(?:what is the (?:meaning|definition|use|purpose) of)\s+",
+]
+
+_CONVERSATIONAL_FILLER_REGEX = re.compile(
+    r"^(can you (?:please )?(?:tell|explain|describe|give|share|provide)|could you (?:please )?(?:tell|explain|describe|give|share|provide)|please (?:tell|explain|describe|give|share|provide)|tell me|talk about|explain to me|i want to know|i would like to know|help me understand|what can you tell me|what do you know about)\s*",
+    re.IGNORECASE,
+)
+
+def strip_conversational_frames(query: str) -> str:
+    """
+    Strips leading and trailing conversational wrapper phrases, politeness markers,
+    and filler (e.g., 'tell me about neem', 'can you explain neem to me please')
+    leaving the core domain question or entity.
+    """
+    res = query.strip()
+    res = _TRAILING_FILLER_REGEX.sub("", res).strip()
+    for pattern in _LEADING_CONVERSATIONAL_FRAMES:
+        res = re.sub(pattern, "", res, flags=re.IGNORECASE).strip()
+    res = _TRAILING_FILLER_REGEX.sub("", res).strip()
+    if len(res.split()) <= 4:
+        res = res.rstrip("?. ")
+    return res
 
 _STOPWORDS = {"its", "it", "the", "this", "that", "their", "a", "an", "what", "which", "is", "of", "in"}
 
@@ -48,11 +91,13 @@ def _extract_last_subject(memory: Optional[ConversationMemory]) -> Optional[str]
     last_query = getattr(last_turn, "user_message", "")
     if not last_query:
         return None
-    # Strip common question frames: "what is", "explain", "tell me about", etc.
+    # Strip conversational frames: "tell me about", "meaning and use of", etc.
+    cleaned = strip_conversational_frames(last_query.strip())
+    # Strip common question frames: "what is", "explain", etc.
     cleaned = re.sub(
         r"^(?:what is(?: the)?|what are(?: the)?|how to|how does|why is|explain(?: the)?|tell me about|describe(?: the)?)\s+",
         "",
-        last_query.strip(),
+        cleaned,
         flags=re.IGNORECASE,
     ).rstrip("?. ")
     return cleaned.strip() if cleaned else None
@@ -64,14 +109,14 @@ def normalize_query_heuristics(
 ) -> str:
     """
     Deterministic query normalization for acronym inquiries, regional idioms ('full form'),
-    and multi-turn conversational follow-ups.
+    conversational frame stripping, and multi-turn conversational follow-ups.
     """
     clean = question.strip()
     if not clean:
         return ""
 
-    # Strip conversational filler prefixes
-    clean = _CONVERSATIONAL_FILLER_REGEX.sub("", clean).strip()
+    # Strip conversational filler prefixes & wrappers
+    clean = strip_conversational_frames(clean)
 
     # 1. Pattern: "full form of <TERM>" or "what is the full form of <TERM>"
     m_term1 = re.search(
@@ -107,10 +152,16 @@ def normalize_query_heuristics(
                 if last_subj.lower() not in clean.lower():
                     return f"{clean} (Regarding: {last_subj})"
 
-            # Very short follow-ups (<= 4 words)
+            # Very short follow-ups (<= 4 words) that are elliptical fragments, NOT standalone questions
             words = clean.split()
             if len(words) <= 4 and last_subj.lower() not in clean.lower():
-                if not any(w.lower() in ("hi", "hello", "thanks", "bye", "ok", "yes", "no") for w in words):
+                question_or_greeting = {
+                    "hi", "hello", "thanks", "bye", "ok", "yes", "no",
+                    "what", "who", "where", "when", "how", "why", "which",
+                    "is", "are", "was", "were", "do", "does", "did", "can",
+                    "could", "should", "would", "tell", "explain", "describe",
+                }
+                if not any(w.lower() in question_or_greeting for w in words):
                     return f"{clean} of {last_subj}"
 
     return clean
@@ -137,7 +188,7 @@ class RephraserAgent:
         """
         clean = question.strip()
         # Strip conversational filler
-        clean = _CONVERSATIONAL_FILLER_REGEX.sub("", clean).strip()
+        clean = strip_conversational_frames(clean)
 
         # Stitch context if available and referential
         last_subj = _extract_last_subject(memory)
@@ -161,18 +212,20 @@ class RephraserAgent:
             if _SHORT_FOLLOWUP_REGEX.search(clean) or _REFERENTIAL_REGEX.search(clean):
                 return True
 
-        # 2. Check for conversational filler prefixes
-        if _CONVERSATIONAL_FILLER_REGEX.search(clean):
-            return True
-
-        # 3. Check for potential typos: repeated unusual chars, non-alphanumeric noise
+        # 2. Check for potential typos: repeated unusual chars, non-alphanumeric noise
         if re.search(r"([a-zA-Z])\1{2,}", clean):  # e.g., 'whaaat', 'soooo'
             return True
 
-        # 4. Check for obvious misspellings / malformed question starts (e.g., 'waht', 'explian', 'suprvised')
+        # 3. Check for obvious misspellings / malformed question starts (e.g., 'waht', 'explian', 'suprvised')
         clean_lower = clean.lower()
         if any(typo in clean_lower for typo in ["waht", "whar", "explian", "suprvised", "lerning", "procesing", "descision", "classifcation", "modling"]):
             return True
+
+        # 4. Check for conversational filler prefixes that cannot be cleanly stripped
+        if _CONVERSATIONAL_FILLER_REGEX.search(clean):
+            stripped = strip_conversational_frames(clean)
+            if not stripped or stripped.lower() == clean.lower():
+                return True
 
         return False
 
@@ -209,16 +262,21 @@ class RephraserAgent:
                 history_text = str(memory).strip()
                 has_history = bool(history_text)
 
-        # 1. Deterministic acronym & "full form" normalization (instant 0ms, avoids cross-encoder penalty)
+        # 1. Deterministic heuristic normalization (instant 0ms, strips filler & normalizes acronyms)
+        normalized = normalize_query_heuristics(raw_q, mem_obj)
+        if normalized != raw_q and not force_llm:
+            if not self._needs_llm_processing(normalized, has_history):
+                print(f"  [Rephraser Agent (Heuristic)] '{raw_q}' ──► '{normalized}'")
+                return normalized
+
         if re.search(r"(?i)\bfull[-\s]*form\b", raw_q):
-            normalized = normalize_query_heuristics(raw_q, mem_obj)
             if normalized != raw_q:
                 print(f"  [Rephraser Agent (Heuristic)] '{raw_q}' ──► '{normalized}'")
                 return normalized
 
         # 2. Fast heuristic bypass for clean standalone single queries
         if not force_llm and FAST_REPHRASER and not self._needs_llm_processing(raw_q, has_history):
-            return raw_q
+            return normalized if normalized else raw_q
 
         # 3. Construct prompt for Rephraser Agent LLM
         if has_history:

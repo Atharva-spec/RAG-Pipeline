@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
@@ -241,6 +242,16 @@ def vector_search(query: str, k: int = TOP_K) -> list[dict]:
 
 
 def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
+    # Strip conversational frames so full-text search doesn't require conversational stop words
+    clean_query = re.sub(
+        r"^(?:can you (?:please )?(?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|could you (?:please )?(?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|please (?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|tell me(?: more)?(?: about| regarding| on)?|talk about|explain to me(?: about)?|what can you tell me(?: about| regarding)?|what do you know about|what about|how about|i (?:just )?(?:want|would like|wish) to know(?: more)?(?: about| on| regarding)?|give me(?: some)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|information (?:about|on|regarding)|details (?:about|on|regarding))\s+",
+        "",
+        query.strip(),
+        flags=re.IGNORECASE,
+    ).strip()
+    if not clean_query:
+        clean_query = query.strip()
+
     query_sql = f"""
         SELECT
             id, doc_id, doc_hash, content_hash, chunk_index, total_chunks,
@@ -255,9 +266,39 @@ def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query_sql, {"query": query, "limit": k})
+            cur.execute(query_sql, {"query": clean_query, "limit": k})
             rows = cur.fetchall()
-            return [_format_row(r, r["score"], "bm25") for r in rows]
+            if rows:
+                return [_format_row(r, r["score"], "bm25") for r in rows]
+
+            # Fallback: OR across significant keywords if plainto had 0 hits
+            stopwords = {
+                "tell", "about", "what", "how", "when", "where", "which", "who",
+                "the", "and", "for", "with", "can", "you", "please", "give", "more",
+                "details", "info", "information", "describe", "explain", "want", "know",
+                "some", "regarding", "from", "into", "over", "after", "before", "is",
+                "are", "was", "were", "do", "does", "did", "meaning", "meanings",
+                "use", "uses", "used", "definition", "definitions", "purpose", "overview",
+            }
+            tokens = [w for w in re.findall(r"[a-zA-Z0-9_\-]+", clean_query) if len(w) > 1 and w.lower() not in stopwords]
+            if tokens:
+                or_q = " | ".join(tokens)
+                fallback_sql = f"""
+                    SELECT
+                        id, doc_id, doc_hash, content_hash, chunk_index, total_chunks,
+                        text, parent_id, parent_text, source, file_type, file_size_bytes,
+                        last_modified, section_header, char_count, word_count, strategy,
+                        ts_rank_cd(tsv, to_tsquery('english', %(query)s)) AS score
+                    FROM {POSTGRES_TABLE}
+                    WHERE tsv @@ to_tsquery('english', %(query)s)
+                    ORDER BY score DESC
+                    LIMIT %(limit)s;
+                """
+                cur.execute(fallback_sql, {"query": or_q, "limit": k})
+                fallback_rows = cur.fetchall()
+                if fallback_rows:
+                    return [_format_row(r, r["score"], "bm25_fallback") for r in fallback_rows]
+            return []
 
 
 def hybrid_search(query: str, k: int = TOP_K, rrf_k: int = RRF_K) -> list[dict]:
@@ -265,9 +306,10 @@ def hybrid_search(query: str, k: int = TOP_K, rrf_k: int = RRF_K) -> list[dict]:
     Executes Hybrid Search combining Dense Vector Search and Lexical BM25 Search
     concurrently using ThreadPoolExecutor and Reciprocal Rank Fusion (RRF).
     """
+    fetch_k = max(k * 3, 24)
     with ThreadPoolExecutor(max_workers=2) as executor:
-        future_dense = executor.submit(vector_search, query, k)
-        future_bm25 = executor.submit(lexical_search, query, k)
+        future_dense = executor.submit(vector_search, query, fetch_k)
+        future_bm25 = executor.submit(lexical_search, query, fetch_k)
         dense_results = future_dense.result()
         bm25_results = future_bm25.result()
 

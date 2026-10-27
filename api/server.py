@@ -67,6 +67,38 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def prewarm_pipeline():
+    """
+    Pre-warms embedding models, ONNX Cross-Encoder reranker session,
+    and Redis connection cache at server launch to eliminate cold-start latency.
+    """
+    logger.info("⚡ [Pre-warm] Initializing pipeline components...")
+    t0 = time.time()
+    try:
+        from retrieval.vector_store import get_embedder
+        get_embedder()
+        logger.info("  [Pre-warm] Embedder model loaded.")
+    except Exception as e:
+        logger.warning(f"  [Pre-warm] Embedder warmup failed: {e}")
+
+    try:
+        from retrieval.reranker import _get_onnx_session
+        _get_onnx_session()
+        logger.info("  [Pre-warm] ONNX Reranker session loaded.")
+    except Exception as e:
+        logger.warning(f"  [Pre-warm] ONNX Reranker warmup failed: {e}")
+
+    try:
+        from core.cache import get_redis_client
+        get_redis_client()
+        logger.info("  [Pre-warm] Redis connection established.")
+    except Exception as e:
+        logger.warning(f"  [Pre-warm] Redis warmup failed: {e}")
+
+    logger.info(f"⚡ [Pre-warm] Finished in {round((time.time() - t0) * 1000, 1)}ms.")
+
+
 # =========================================================================
 # Pydantic Request & Response Models
 # =========================================================================

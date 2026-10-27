@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import redis
@@ -17,35 +18,45 @@ logger = logging.getLogger(__name__)
 
 _redis_client: Optional[redis.Redis] = None
 _redis_healthy: Optional[bool] = None
+_last_failed_attempt: float = 0.0
+_RETRY_COOLDOWN_SECONDS: float = 30.0
 
 
 def get_redis_client() -> Optional[redis.Redis]:
     """
     Returns a singleton Redis client with lazy connection and quick timeout.
+    Implements a circuit-breaker cooldown so offline Redis never blocks queries.
     Returns None if Redis is disabled or unreachable.
     """
-    global _redis_client, _redis_healthy
+    global _redis_client, _redis_healthy, _last_failed_attempt
 
     if not REDIS_ENABLED:
         return None
 
+    # Circuit breaker: if recent connection failed, skip reconnecting until cooldown passes
+    now = time.time()
+    if _redis_healthy is False and (now - _last_failed_attempt) < _RETRY_COOLDOWN_SECONDS:
+        return None
+
     if _redis_client is None:
         try:
-            _redis_client = redis.Redis(
+            client = redis.Redis(
                 host=REDIS_HOST,
                 port=REDIS_PORT,
                 password=REDIS_PASSWORD if REDIS_PASSWORD else None,
                 decode_responses=True,
-                socket_connect_timeout=1.0,
-                socket_timeout=2.0,
+                socket_connect_timeout=0.25,
+                socket_timeout=0.5,
             )
             # Fast ping check
-            _redis_client.ping()
+            client.ping()
+            _redis_client = client
             _redis_healthy = True
             logger.info(f"Connected to Redis cache at {REDIS_HOST}:{REDIS_PORT}")
         except Exception as e:
             logger.debug(f"Redis not available ({e}). Running without Redis caching.")
             _redis_healthy = False
+            _last_failed_attempt = now
             _redis_client = None
 
     return _redis_client
@@ -61,6 +72,10 @@ def is_redis_available() -> bool:
     try:
         return bool(client.ping())
     except Exception:
+        global _redis_healthy, _last_failed_attempt, _redis_client
+        _redis_healthy = False
+        _last_failed_attempt = time.time()
+        _redis_client = None
         return False
 
 

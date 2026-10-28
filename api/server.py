@@ -44,6 +44,7 @@ from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
 from generation.rephraser_agent import rephrase_query
 from ingestion.incremental_ingest import sync_incremental
+from ingestion.document_loader import SUPPORTED_EXTENSIONS
 from retrieval.health_check import check_llm, check_postgres
 from retrieval.reranker import rerank_chunks
 from retrieval.retriever import retrieve_chunks
@@ -232,10 +233,14 @@ def execute_query(payload: QueryRequest):
     memory = ConversationMemory(session_id=session_id)
     search_query = rephrase_query(question, memory=memory)
 
-    # 4. Hybrid Retrieval (Vector + GIN with RRF)
-    raw_chunks = retrieve_chunks(search_query, k=_runtime_config.top_k)
-    if payload.selected_docs:
-        raw_chunks = [c for c in raw_chunks if c.get("source") in payload.selected_docs]
+    # 4. High-recall hybrid retrieval. The original question remains in the
+    # candidate set, and document scoping is pushed into the database search.
+    raw_chunks = retrieve_chunks(
+        search_query,
+        k=_runtime_config.top_k,
+        query_variants=[question],
+        selected_docs=payload.selected_docs,
+    )
 
     if not raw_chunks:
         refusal = safe_refusal_response()
@@ -369,9 +374,12 @@ def execute_query_stream(payload: QueryRequest):
         memory = ConversationMemory(session_id=session_id)
         search_query = rephrase_query(question, memory=memory)
 
-        raw_chunks = retrieve_chunks(search_query, k=_runtime_config.top_k)
-        if payload.selected_docs:
-            raw_chunks = [c for c in raw_chunks if c.get("source") in payload.selected_docs]
+        raw_chunks = retrieve_chunks(
+            search_query,
+            k=_runtime_config.top_k,
+            query_variants=[question],
+            selected_docs=payload.selected_docs,
+        )
 
         if not raw_chunks:
             refusal = safe_refusal_response()
@@ -506,14 +514,27 @@ async def upload_document(file: UploadFile = File(...)):
     Uploads a document to data/raw/ and triggers incremental indexing into PostgreSQL.
     """
     os.makedirs(DATA_RAW_DIR, exist_ok=True)
-    filename = file.filename
+    # Never allow a client-provided path to escape data/raw.
+    filename = os.path.basename(file.filename or "").strip()
     if not filename:
         raise HTTPException(status_code=400, detail="Filename cannot be empty.")
 
-    filepath = os.path.join(DATA_RAW_DIR, filename)
+    extension = os.path.splitext(filename)[1].lower()
+    if extension not in SUPPORTED_EXTENSIONS:
+        supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported document type '{extension or '[none]'}'. Supported types: {supported}",
+        )
 
-    with open(filepath, "wb") as buffer:
+    filepath = os.path.join(DATA_RAW_DIR, filename)
+    temporary_path = f"{filepath}.uploading"
+
+    # Write completely before making the file visible to the folder watcher or
+    # incremental synchronizer.
+    with open(temporary_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+    os.replace(temporary_path, filepath)
 
     # Trigger smart incremental sync
     try:

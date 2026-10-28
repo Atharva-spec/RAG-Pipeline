@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import psycopg
 from pgvector.psycopg import register_vector
@@ -218,10 +218,25 @@ def _format_row(row: dict, score: float, method: str) -> dict:
     }
 
 
-def vector_search(query: str, k: int = TOP_K) -> list[dict]:
+def _source_filter(sources: Optional[Sequence[str]]) -> tuple[str, dict]:
+    """Return a safe SQL predicate and parameters for document scoping."""
+    if not sources:
+        return "", {}
+    cleaned = sorted({str(source).strip() for source in sources if str(source).strip()})
+    if not cleaned:
+        return "", {}
+    return " AND source = ANY(%(sources)s)", {"sources": cleaned}
+
+
+def vector_search(
+    query: str,
+    k: int = TOP_K,
+    sources: Optional[Sequence[str]] = None,
+) -> list[dict]:
     model = get_embedder()
     vector = model.embed_query(query)
 
+    source_clause, source_params = _source_filter(sources)
     query_sql = f"""
         SELECT
             id, doc_id, doc_hash, content_hash, chunk_index, total_chunks,
@@ -229,6 +244,7 @@ def vector_search(query: str, k: int = TOP_K) -> list[dict]:
             last_modified, section_header, char_count, word_count, strategy,
             1.0 - (vector <=> %(vec)s::vector) AS score
         FROM {POSTGRES_TABLE}
+        WHERE TRUE{source_clause}
         ORDER BY vector <=> %(vec)s::vector
         LIMIT %(limit)s;
     """
@@ -236,12 +252,17 @@ def vector_search(query: str, k: int = TOP_K) -> list[dict]:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(f"SET hnsw.ef_search = {HNSW_EF_SEARCH};")
-            cur.execute(query_sql, {"vec": vector, "limit": k})
+            params = {"vec": vector, "limit": k, **source_params}
+            cur.execute(query_sql, params)
             rows = cur.fetchall()
             return [_format_row(r, r["score"], "vector") for r in rows]
 
 
-def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
+def lexical_search(
+    query: str,
+    k: int = TOP_K,
+    sources: Optional[Sequence[str]] = None,
+) -> list[dict]:
     # Strip conversational frames so full-text search doesn't require conversational stop words
     clean_query = re.sub(
         r"^(?:can you (?:please )?(?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|could you (?:please )?(?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|please (?:tell|explain|describe|give|share|provide)(?: to)?(?: me)?(?: more)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|tell me(?: more)?(?: about| regarding| on)?|talk about|explain to me(?: about)?|what can you tell me(?: about| regarding)?|what do you know about|what about|how about|i (?:just )?(?:want|would like|wish) to know(?: more)?(?: about| on| regarding)?|give me(?: some)?(?: details| info(?:rmation)?)?(?: about| on| regarding)?|information (?:about|on|regarding)|details (?:about|on|regarding))\s+",
@@ -252,6 +273,7 @@ def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
     if not clean_query:
         clean_query = query.strip()
 
+    source_clause, source_params = _source_filter(sources)
     query_sql = f"""
         SELECT
             id, doc_id, doc_hash, content_hash, chunk_index, total_chunks,
@@ -259,14 +281,15 @@ def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
             last_modified, section_header, char_count, word_count, strategy,
             ts_rank_cd(tsv, plainto_tsquery('english', %(query)s)) AS score
         FROM {POSTGRES_TABLE}
-        WHERE tsv @@ plainto_tsquery('english', %(query)s)
+        WHERE tsv @@ plainto_tsquery('english', %(query)s){source_clause}
         ORDER BY score DESC
         LIMIT %(limit)s;
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query_sql, {"query": clean_query, "limit": k})
+            params = {"query": clean_query, "limit": k, **source_params}
+            cur.execute(query_sql, params)
             rows = cur.fetchall()
             if rows:
                 return [_format_row(r, r["score"], "bm25") for r in rows]
@@ -290,26 +313,35 @@ def lexical_search(query: str, k: int = TOP_K) -> list[dict]:
                         last_modified, section_header, char_count, word_count, strategy,
                         ts_rank_cd(tsv, to_tsquery('english', %(query)s)) AS score
                     FROM {POSTGRES_TABLE}
-                    WHERE tsv @@ to_tsquery('english', %(query)s)
+                    WHERE tsv @@ to_tsquery('english', %(query)s){source_clause}
                     ORDER BY score DESC
                     LIMIT %(limit)s;
                 """
-                cur.execute(fallback_sql, {"query": or_q, "limit": k})
+                cur.execute(fallback_sql, {"query": or_q, "limit": k, **source_params})
                 fallback_rows = cur.fetchall()
                 if fallback_rows:
                     return [_format_row(r, r["score"], "bm25_fallback") for r in fallback_rows]
             return []
 
 
-def hybrid_search(query: str, k: int = TOP_K, rrf_k: int = RRF_K) -> list[dict]:
+def hybrid_search(
+    query: str,
+    k: int = TOP_K,
+    rrf_k: int = RRF_K,
+    sources: Optional[Sequence[str]] = None,
+) -> list[dict]:
     """
     Executes Hybrid Search combining Dense Vector Search and Lexical BM25 Search
     concurrently using ThreadPoolExecutor and Reciprocal Rank Fusion (RRF).
     """
     fetch_k = max(k * 3, 24)
     with ThreadPoolExecutor(max_workers=2) as executor:
-        future_dense = executor.submit(vector_search, query, fetch_k)
-        future_bm25 = executor.submit(lexical_search, query, fetch_k)
+        if sources:
+            future_dense = executor.submit(vector_search, query, fetch_k, sources)
+            future_bm25 = executor.submit(lexical_search, query, fetch_k, sources)
+        else:
+            future_dense = executor.submit(vector_search, query, fetch_k)
+            future_bm25 = executor.submit(lexical_search, query, fetch_k)
         dense_results = future_dense.result()
         bm25_results = future_bm25.result()
 
@@ -344,10 +376,14 @@ def hybrid_search(query: str, k: int = TOP_K, rrf_k: int = RRF_K) -> list[dict]:
     return hybrid_hits
 
 
-def search(query: str, k: int = TOP_K) -> list[dict]:
+def search(
+    query: str,
+    k: int = TOP_K,
+    sources: Optional[Sequence[str]] = None,
+) -> list[dict]:
     if HYBRID_SEARCH_ENABLED:
-        return hybrid_search(query, k=k)
-    return vector_search(query, k=k)
+        return hybrid_search(query, k=k, sources=sources)
+    return vector_search(query, k=k, sources=sources)
 
 
 def delete_index():

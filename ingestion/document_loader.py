@@ -17,6 +17,13 @@ SUPPORTED_EXTENSIONS = {
     ".md",
     ".html",
     ".htm",
+    ".csv",
+    ".json",
+    ".xml",
+    ".xlsx",
+    ".xls",
+    ".odt",
+    ".rtf",
 }
 
 
@@ -110,6 +117,18 @@ def _parse_with_unstructured(path: Path) -> str:
                 return "\n\n".join(pages_text)
         except Exception as pe:
             print(f"  [DocumentLoader Error] pypdf fallback also failed on '{path.name}': {pe}")
+
+    # Plain-text fallback for formats whose optional Unstructured dependency
+    # may be unavailable. This keeps ingestion useful in a minimal install and
+    # avoids silently dropping text/markdown/CSV/JSON/XML uploads.
+    if path.suffix.lower() in {".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm", ".rtf"}:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if text.strip():
+                print(f"  [DocumentLoader] Plain-text fallback used for '{path.name}'.")
+                return text
+        except Exception as te:
+            print(f"  [DocumentLoader Error] Plain-text fallback failed on '{path.name}': {te}")
 
     return ""
 

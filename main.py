@@ -72,8 +72,14 @@ def query(
     # 3. Rephraser Agent (Query reformulation, typo repair & context resolution)
     search_query = rephrase_query(question, memory=memory)
 
-    # 4. Hybrid Retrieval from OpenSearch (Dense Vector + BM25 Lexical with RRF)
-    raw_chunks = retrieve_chunks(search_query, k=TOP_K)
+    # 4. High-recall hybrid retrieval. Keep both the rewritten query and the
+    # user's exact wording so a rewrite can improve recall without becoming a
+    # single point of failure.
+    raw_chunks = retrieve_chunks(
+        search_query,
+        k=TOP_K,
+        query_variants=[question],
+    )
     if not raw_chunks:
         refusal = safe_refusal_response()
         if memory is not None:

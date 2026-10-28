@@ -54,8 +54,10 @@ CHUNK_OVERLAP = 150
 
 
 # Retrieval & Search Core (Sub-200ms Tuned)
-TOP_K = 8
-RERANK_TOP_N = 3
+# Keep enough candidates for multi-part questions and parent-context
+# deduplication; the cross-encoder still controls what reaches the LLM.
+TOP_K = 12
+RERANK_TOP_N = 5
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 USE_ONNX_RERANKER = os.getenv("USE_ONNX_RERANKER", "true").lower() in ("true", "1", "yes")
 ONNX_MODEL_DIR = os.getenv("ONNX_MODEL_DIR", str(BASE_DIR / "data" / "models" / "reranker_onnx"))

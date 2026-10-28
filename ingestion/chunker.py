@@ -19,6 +19,19 @@ from core.cache import get_cached_chunks, set_cached_chunks
 from ingestion.normalizer import compute_content_hash, normalize_text
 
 
+def _dedup_key(doc: dict, content_hash: str) -> tuple[str, str]:
+    """Scope deduplication to a real document identity when available.
+
+    A repeated paragraph in two uploaded files is valid evidence in both
+    files. The previous global content-only key silently removed the second
+    document from the index. Documents loaded by the production loader always
+    have a file hash; the content-only fallback is retained for legacy callers
+    that provide bare test/document dictionaries.
+    """
+    doc_hash = str(doc.get("doc_hash") or "").strip()
+    return (doc_hash, content_hash) if doc_hash else ("", content_hash)
+
+
 def chunk_hierarchical(
     documents: List[dict],
     parent_size: int = PARENT_CHUNK_SIZE,
@@ -46,13 +59,14 @@ def chunk_hierarchical(
     )
 
     all_chunks = []
-    seen_content_hashes: Set[str] = set()
+    seen_content_hashes: Set[tuple[str, str]] = set()
     skipped_duplicates = 0
 
     for doc in documents:
         doc_source = doc["source"]
         doc_text = doc["text"]
         doc_id = doc.get("doc_id", doc_source)
+        explicit_doc_hash = bool(doc.get("doc_hash"))
         doc_hash = doc.get("doc_hash", "") or compute_content_hash(doc_text)
         file_type = doc.get("file_type", Path(doc_source).suffix.lower())
         file_size = doc.get("file_size_bytes", 0)
@@ -70,10 +84,11 @@ def chunk_hierarchical(
             for ch in cached_chunks:
                 c_hash = ch.get("content_hash") or compute_content_hash(ch.get("text", ""))
                 if deduplicate:
-                    if c_hash in seen_content_hashes:
+                    dedup_key = (doc_hash, c_hash) if explicit_doc_hash else ("", c_hash)
+                    if dedup_key in seen_content_hashes:
                         skipped_duplicates += 1
                         continue
-                    seen_content_hashes.add(c_hash)
+                    seen_content_hashes.add(dedup_key)
                 valid_chunks.append(ch)
             _save_chunks(doc_source, cached_chunks)
             all_chunks.extend(valid_chunks)
@@ -102,10 +117,11 @@ def chunk_hierarchical(
 
                 # Deduplication filter
                 if deduplicate:
-                    if content_hash in seen_content_hashes:
+                    dedup_key = _dedup_key(doc, content_hash)
+                    if dedup_key in seen_content_hashes:
                         skipped_duplicates += 1
                         continue
-                    seen_content_hashes.add(content_hash)
+                    seen_content_hashes.add(dedup_key)
 
                 chunk_id = f"{doc_source}_p{p_idx}_c{c_idx}"
                 doc_chunks.append(
@@ -170,13 +186,14 @@ def chunk_semantic_sections(
 
     header_pattern = r"(?m)^(#{1,6}\s+.+|[A-Z0-9\s]{4,}:|\bModule\s+\d+\b|\bLecture\s+\d+\b)"
     all_chunks = []
-    seen_content_hashes: Set[str] = set()
+    seen_content_hashes: Set[tuple[str, str]] = set()
     skipped_duplicates = 0
 
     for doc in documents:
         doc_source = doc["source"]
         doc_text = doc["text"]
         doc_id = doc.get("doc_id", doc_source)
+        explicit_doc_hash = bool(doc.get("doc_hash"))
         doc_hash = doc.get("doc_hash", "") or compute_content_hash(doc_text)
         file_type = doc.get("file_type", Path(doc_source).suffix.lower())
         file_size = doc.get("file_size_bytes", 0)
@@ -194,10 +211,11 @@ def chunk_semantic_sections(
             for ch in cached_chunks:
                 c_hash = ch.get("content_hash") or compute_content_hash(ch.get("text", ""))
                 if deduplicate:
-                    if c_hash in seen_content_hashes:
+                    dedup_key = (doc_hash, c_hash) if explicit_doc_hash else ("", c_hash)
+                    if dedup_key in seen_content_hashes:
                         skipped_duplicates += 1
                         continue
-                    seen_content_hashes.add(c_hash)
+                    seen_content_hashes.add(dedup_key)
                 valid_chunks.append(ch)
             _save_chunks(doc_source, cached_chunks)
             all_chunks.extend(valid_chunks)
@@ -237,10 +255,11 @@ def chunk_semantic_sections(
             if len(clean_section) <= max_chunk_size:
                 content_hash = compute_content_hash(clean_section)
                 if deduplicate:
-                    if content_hash in seen_content_hashes:
+                    dedup_key = (doc_hash, content_hash) if explicit_doc_hash else ("", content_hash)
+                    if dedup_key in seen_content_hashes:
                         skipped_duplicates += 1
                         continue
-                    seen_content_hashes.add(content_hash)
+                    seen_content_hashes.add(dedup_key)
 
                 doc_chunks.append(
                     {
@@ -273,10 +292,11 @@ def chunk_semantic_sections(
 
                     content_hash = compute_content_hash(clean_s)
                     if deduplicate:
-                        if content_hash in seen_content_hashes:
+                        dedup_key = (doc_hash, content_hash) if explicit_doc_hash else ("", content_hash)
+                        if dedup_key in seen_content_hashes:
                             skipped_duplicates += 1
                             continue
-                        seen_content_hashes.add(content_hash)
+                        seen_content_hashes.add(dedup_key)
 
                     doc_chunks.append(
                         {
@@ -338,13 +358,14 @@ def chunk_recursive(
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     all_chunks = []
-    seen_content_hashes: Set[str] = set()
+    seen_content_hashes: Set[tuple[str, str]] = set()
     skipped_duplicates = 0
 
     for doc in documents:
         doc_source = doc["source"]
         doc_text = doc["text"]
         doc_id = doc.get("doc_id", doc_source)
+        explicit_doc_hash = bool(doc.get("doc_hash"))
         doc_hash = doc.get("doc_hash", "") or compute_content_hash(doc_text)
         file_type = doc.get("file_type", Path(doc_source).suffix.lower())
         file_size = doc.get("file_size_bytes", 0)
@@ -362,10 +383,11 @@ def chunk_recursive(
             for ch in cached_chunks:
                 c_hash = ch.get("content_hash") or compute_content_hash(ch.get("text", ""))
                 if deduplicate:
-                    if c_hash in seen_content_hashes:
+                    dedup_key = (doc_hash, c_hash) if explicit_doc_hash else ("", c_hash)
+                    if dedup_key in seen_content_hashes:
                         skipped_duplicates += 1
                         continue
-                    seen_content_hashes.add(c_hash)
+                    seen_content_hashes.add(dedup_key)
                 valid_chunks.append(ch)
             _save_chunks(doc_source, cached_chunks)
             all_chunks.extend(valid_chunks)
@@ -383,10 +405,11 @@ def chunk_recursive(
 
             content_hash = compute_content_hash(clean_s)
             if deduplicate:
-                if content_hash in seen_content_hashes:
+                dedup_key = (doc_hash, content_hash) if explicit_doc_hash else ("", content_hash)
+                if dedup_key in seen_content_hashes:
                     skipped_duplicates += 1
                     continue
-                seen_content_hashes.add(content_hash)
+                seen_content_hashes.add(dedup_key)
 
             doc_chunks.append(
                 {

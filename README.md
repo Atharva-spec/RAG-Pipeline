@@ -82,6 +82,9 @@ REDIS_HOST=localhost
 REDIS_PORT=6380
 REDIS_ENABLED=true
 
+AUTO_SYNC_ENABLED=true
+AUTO_SYNC_INTERVAL_SECONDS=2.0
+
 LLM_BACKEND=groq
 GROQ_API_KEY=gsk_your_key_here
 GROQ_MODEL=openai/gpt-oss-120b
@@ -100,6 +103,8 @@ npm start
 ```
 
 The first ingestion may download embedding and reranker models and can take several minutes. The query path cannot answer from a document that has not been successfully indexed.
+
+When the API or interactive CLI is running, supported files added to `data/raw/` are detected automatically. The API runs a background folder watcher and also performs a change-aware catch-up immediately before document queries, so a newly copied file becomes searchable without manually running `npm run ingest`.
 
 ### 4. Start the API
 
@@ -185,6 +190,8 @@ The health endpoint checks dependency connectivity and client initialization; it
 
 `npm run ingest` compares SHA-256 file hashes with the indexed sources. New files are parsed and embedded, changed files have their old chunks removed before replacement ingestion, and files missing from `data/raw/` have their chunks purged.
 
+The API and interactive CLI use the same hash-based synchronizer automatically. The API starts a background watcher at launch and checks for a change immediately before each document query. Set `AUTO_SYNC_ENABLED=false` to disable this behavior. `AUTO_SYNC_INTERVAL_SECONDS` controls the background polling interval; the minimum supported value is 0.25 seconds.
+
 `npm run watch` performs an initial sync and then polls `data/raw/` every two seconds by default.
 
 Supported source extensions are `.pdf`, `.docx`, `.doc`, `.pptx`, `.ppt`, `.txt`, `.md`, `.html`, and `.htm`.
@@ -192,7 +199,7 @@ Supported source extensions are `.pdf`, `.docx`, `.doc`, `.pptx`, `.ppt`, `.txt`
 Current limitations:
 
 - Scanned or image-only PDFs require an OCR stage that is not included.
-- Upload ingestion runs synchronously in the request process; large files should be moved to a background job system before production use.
+- Upload and automatic folder ingestion run synchronously in the indexing process; large files should be moved to a background job system before production use.
 - Failed replacement ingestion can leave a modified document absent until a later successful sync.
 - Source page metadata is not consistently preserved for every parser, so citations may not identify a PDF page.
 - Processed extracted text is stored under `data/processed/`; deletion workflows should remove it as part of customer data deletion.

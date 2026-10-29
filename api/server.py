@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import time
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field
 from config.settings import (
     API_HOST,
     API_PORT,
+    AUTO_SYNC_ENABLED,
     DATA_RAW_DIR,
     GROQ_MODEL,
     GUARDRAIL_CONFIDENCE_THRESHOLD,
@@ -43,8 +45,8 @@ from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
 from generation.rephraser_agent import rephrase_query
-from ingestion.incremental_ingest import sync_incremental
 from ingestion.document_loader import SUPPORTED_EXTENSIONS
+from ingestion.auto_sync import folder_auto_sync
 from retrieval.health_check import check_llm, check_postgres
 from retrieval.reranker import rerank_chunks
 from retrieval.retriever import retrieve_chunks
@@ -52,10 +54,23 @@ from retrieval.vector_store import get_connection
 
 logger = logging.getLogger("rag_api")
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Run automatic raw-folder synchronization while the API is alive."""
+    if AUTO_SYNC_ENABLED:
+        folder_auto_sync.start()
+    try:
+        yield
+    finally:
+        if AUTO_SYNC_ENABLED:
+            folder_auto_sync.stop()
+
 app = FastAPI(
     title="Enterprise Conversational RAG Knowledge Engine API",
     description="High-performance REST & SSE Token Streaming API with PostgreSQL pgvector and Redis Caching",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for Next.js, Stitch previews, and mobile apps
@@ -161,6 +176,7 @@ def get_health_status():
             "model": _runtime_config.model,
         },
         "redis_cache": redis_stats,
+        "automatic_sync": folder_auto_sync.status(),
         "timestamp": time.time(),
     }
 
@@ -228,6 +244,10 @@ def execute_query(payload: QueryRequest):
             ),
             refusal=False,
         )
+
+    # Catch up synchronously if a document was dropped immediately before the
+    # query. The background watcher handles normal changes between requests.
+    folder_auto_sync.ensure_latest()
 
     # 3. Rephraser Agent (Query reformulation, typo repair & context resolution)
     memory = ConversationMemory(session_id=session_id)
@@ -369,6 +389,10 @@ def execute_query_stream(payload: QueryRequest):
             yield f"data: {json.dumps({'event': 'token', 'content': intent_reply})}\n\n"
             yield f"data: {json.dumps({'event': 'done', 'refusal': False})}\n\n"
             return
+
+        # Ensure a file added just before an SSE request is searchable now;
+        # the background watcher covers later changes.
+        folder_auto_sync.ensure_latest()
 
         # 3. Rephraser Agent & Retrieval
         memory = ConversationMemory(session_id=session_id)
@@ -538,7 +562,7 @@ async def upload_document(file: UploadFile = File(...)):
 
     # Trigger smart incremental sync
     try:
-        sync_res = sync_incremental(DATA_RAW_DIR, verbose=True)
+        sync_res = folder_auto_sync.sync_now()
         chunks_added = sync_res.get("chunks_added", 0)
     except Exception as e:
         logger.error(f"Error during document indexing: {e}", exc_info=True)

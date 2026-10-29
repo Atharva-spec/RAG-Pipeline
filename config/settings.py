@@ -102,4 +102,10 @@ DATA_RAW_DIR = os.getenv("DATA_RAW_DIR", str(BASE_DIR / "data" / "raw"))
 DATA_PROCESSED_DIR = os.getenv("DATA_PROCESSED_DIR", str(BASE_DIR / "data" / "processed"))
 DATA_CHUNKS_DIR = os.getenv("DATA_CHUNKS_DIR", str(BASE_DIR / "data" / "chunks"))
 
+# Automatic folder synchronization. The API and CLI query paths perform a
+# change-aware catch-up before retrieval, while the API also runs a daemon
+# watcher so newly dropped documents become searchable without a manual ingest.
+AUTO_SYNC_ENABLED = os.getenv("AUTO_SYNC_ENABLED", "true").lower() in ("true", "1", "yes")
+AUTO_SYNC_INTERVAL_SECONDS = float(os.getenv("AUTO_SYNC_INTERVAL_SECONDS", "2.0"))
+
 

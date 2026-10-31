@@ -1,11 +1,11 @@
 import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from config.settings import DATA_RAW_DIR, POSTGRES_TABLE
 from core.cache import invalidate_cached_chunks
 from ingestion.chunker import chunk_documents
-from ingestion.document_loader import SUPPORTED_EXTENSIONS, load_documents
+from ingestion.document_loader import SUPPORTED_EXTENSIONS
 from ingestion.normalizer import compute_file_hash
 from retrieval.vector_store import (
     add_chunks,

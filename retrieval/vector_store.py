@@ -1,8 +1,7 @@
-import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import psycopg
 from pgvector.psycopg import register_vector
@@ -15,12 +14,7 @@ from config.settings import (
     HNSW_EF_SEARCH,
     HNSW_M,
     HYBRID_SEARCH_ENABLED,
-    POSTGRES_DB,
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_PORT,
     POSTGRES_TABLE,
-    POSTGRES_USER,
     RRF_K,
     TOP_K,
 )

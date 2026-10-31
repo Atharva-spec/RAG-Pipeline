@@ -1,24 +1,21 @@
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from config.settings import GUARDRAIL_CONFIDENCE_THRESHOLD
 from evaluation.evaluator import (
     compute_answer_relevance,
     compute_context_precision,
     compute_context_recall,
     compute_faithfulness,
 )
-from generation.citation_resolver import extract_cited_indices, format_citations_footer, resolve_citations
+from generation.citation_resolver import extract_cited_indices, resolve_citations
 from generation.guardrails import (
     check_input_safety,
     detect_conversational_intent,
     safe_refusal_response,
     sanitize_context_text,
-    sanitize_output,
     validate_output_safety,
     validate_retrieval_confidence,
 )
@@ -714,7 +711,7 @@ class TestRedisCaching(unittest.TestCase):
     def test_session_cache_and_clear(self, mock_client):
         mock_redis = MagicMock()
         mock_client.return_value = mock_redis
-        from core.cache import clear_cached_session, get_cached_session, set_cached_session
+        from core.cache import clear_cached_session, set_cached_session
 
         set_cached_session("sess_1", [{"user_message": "hi", "assistant_answer": "hello"}])
         mock_redis.set.assert_called_once()

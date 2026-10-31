@@ -1,16 +1,12 @@
-import os
 import socket
 from typing import Tuple
 
 from config.settings import (
-    DATABASE_URL,
     GROQ_API_KEY,
     GROQ_MODEL,
-    LLM_BACKEND,
     POSTGRES_DB,
     POSTGRES_HOST,
     POSTGRES_PORT,
-    POSTGRES_TABLE,
 )
 
 

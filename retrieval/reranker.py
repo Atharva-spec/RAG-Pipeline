@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
 # Suppress HuggingFace / Tokenizers noisy logs
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -9,7 +9,6 @@ os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 
-import numpy as np
 from config.settings import ONNX_MODEL_DIR, RERANK_MODEL, RERANK_TOP_N, USE_ONNX_RERANKER
 
 logger = logging.getLogger(__name__)

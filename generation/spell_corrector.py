@@ -2,7 +2,6 @@
 Deprecated: Replaced by generation.rephraser_agent.RephraserAgent.
 This module is maintained for backwards compatibility.
 """
-from typing import Optional
 from generation.rephraser_agent import rephrase_query
 
 

@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import json
 import logging
@@ -6,7 +5,7 @@ import os
 import shutil
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +21,6 @@ from config.settings import (
     GROQ_STT_MODEL,
     GUARDRAIL_CONFIDENCE_THRESHOLD,
     LLM_BACKEND,
-    LLM_MODEL,
     LLM_TEMPERATURE,
     RERANK_TOP_N,
     STT_BACKEND,
@@ -34,8 +32,6 @@ from config.settings import (
 from core.cache import (
     clear_cached_session,
     get_cache_stats,
-    invalidate_cached_chunks,
-    is_redis_available,
 )
 from generation.citation_resolver import resolve_citations
 from generation.guardrails import (
@@ -48,7 +44,6 @@ from generation.guardrails import (
 from generation.llm_client import get_answer, stream_answer, transcribe_audio
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
-from generation.query_condenser import condense_query
 from generation.rephraser_agent import rephrase_query
 from ingestion.document_loader import SUPPORTED_EXTENSIONS
 from ingestion.auto_sync import folder_auto_sync

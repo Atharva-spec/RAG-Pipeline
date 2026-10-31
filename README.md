@@ -286,19 +286,6 @@ RAG-pipeline/
 └── package.json               # npm command wrapper
 ```
 
-## Production hardening still required
-
-Before serving untrusted or multi-customer traffic, add:
-
-- Authentication, authorization, tenant-aware document storage, tenant-scoped retrieval, and tenant-scoped Redis keys.
-- Safe filename handling, extension/content validation, upload size limits, malware scanning, and protected administrative endpoints.
-- PostgreSQL connection pooling, request timeouts, retries, rate limits, quotas, cancellation handling, and a background ingestion queue.
-- Transactional or staged document replacement with rollback and complete deletion of processed artifacts.
-- Structured logs, per-stage traces, audit events, backups, restore drills, schema migrations, and CI lint/type/test checks.
-- Claim-level citation validation and an evaluation set tied to the target customer domain.
-- Production Docker secrets, private database networking, TLS, non-default credentials, and resource limits.
-
-The repository roadmap in [`TODO.md`](TODO.md) tracks the remaining frontend, mobile, observability, and CI work.
 
 ## License
 

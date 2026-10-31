@@ -6,7 +6,6 @@ from generation.guardrails import (
     check_input_safety,
     detect_conversational_intent,
     safe_refusal_response,
-    sanitize_output,
     validate_output_safety,
     validate_retrieval_confidence,
 )

@@ -45,7 +45,12 @@ from generation.guardrails import (
     validate_output_safety,
     validate_retrieval_confidence,
 )
-from generation.llm_client import get_answer, stream_answer, transcribe_audio
+from generation.llm_client import (
+    NoSpeechDetectedError,
+    get_answer,
+    stream_answer,
+    transcribe_audio,
+)
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
@@ -220,6 +225,13 @@ async def transcribe_query_audio(
     if not STT_ENABLED:
         raise HTTPException(status_code=503, detail="Speech-to-text is disabled.")
 
+    requested_language = (language or STT_DEFAULT_LANGUAGE or "en").strip().lower()
+    if requested_language != "en":
+        raise HTTPException(
+            status_code=400,
+            detail="Only English speech-to-text is currently supported.",
+        )
+
     filename = os.path.basename(file.filename or "recording.webm")
     extension = os.path.splitext(filename)[1].lower()
     supported_audio_extensions = {
@@ -246,14 +258,23 @@ async def transcribe_query_audio(
             audio_bytes,
             filename,
             content_type=file.content_type,
-            language=language or STT_DEFAULT_LANGUAGE or None,
+            language=requested_language,
         )
+    except NoSpeechDetectedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         logger.error("Speech-to-text configuration error: %s", exc)
         raise HTTPException(status_code=503, detail="Speech-to-text is not configured.") from exc
     except Exception as exc:
         logger.error("Speech-to-text request failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=502, detail="Speech-to-text provider failed.") from exc
+
+    detected_language = (result.get("language") or "").strip().lower()
+    if detected_language and detected_language != "en":
+        raise HTTPException(
+            status_code=422,
+            detail="Only English speech-to-text is currently supported.",
+        )
 
     return TranscriptionResponse(
         text=result["text"],

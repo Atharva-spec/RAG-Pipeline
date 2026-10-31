@@ -29,7 +29,7 @@ STT_ENABLED = os.getenv("STT_ENABLED", "true").lower() in ("true", "1", "yes")
 STT_BACKEND = os.getenv("STT_BACKEND", "groq").lower()
 GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 STT_MAX_FILE_SIZE_BYTES = int(os.getenv("STT_MAX_FILE_SIZE_BYTES", str(25 * 1024 * 1024)))
-STT_DEFAULT_LANGUAGE = os.getenv("STT_DEFAULT_LANGUAGE", "")
+STT_DEFAULT_LANGUAGE = os.getenv("STT_DEFAULT_LANGUAGE", "en").strip().lower() or "en"
 LLM_MODEL = os.getenv("LLM_MODEL", GROQ_MODEL)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 

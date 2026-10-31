@@ -1,7 +1,9 @@
+import io
 import json
 import os
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -375,6 +377,22 @@ class TestCloudLLM(unittest.TestCase):
         mock_groq.side_effect = Exception("API rate limit exceeded")
         with self.assertRaises(RuntimeError):
             get_answer([{"role": "user", "content": "hello"}], backend="groq")
+
+    @patch("generation.llm_client._get_groq_client")
+    def test_transcribe_silence_does_not_call_provider(self, mock_client):
+        from generation.llm_client import NoSpeechDetectedError, transcribe_audio
+
+        audio = io.BytesIO()
+        with wave.open(audio, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(16000)
+            wav_file.writeframes(b"\x00\x00" * 16000)
+
+        with self.assertRaises(NoSpeechDetectedError):
+            transcribe_audio(audio.getvalue(), "silent.wav", "audio/wav", language="en")
+
+        mock_client.assert_not_called()
 
 
 class TestParallelHybridSearch(unittest.TestCase):
@@ -830,6 +848,73 @@ class TestFastAPIServer(unittest.TestCase):
         res = self.client.post("/v1/memory/clear?session_id=user_123")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["status"], "success")
+
+    @patch("api.server.transcribe_audio")
+    def test_transcribe_english_passes_english_language(self, mock_transcribe):
+        mock_transcribe.return_value = {
+            "text": "This is an English speech to text test.",
+            "language": "en",
+            "model": "whisper-large-v3-turbo",
+        }
+
+        response = self.client.post(
+            "/v1/transcribe",
+            files={"file": ("english.wav", b"test-audio", "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["language"], "en")
+        self.assertEqual(mock_transcribe.call_args.kwargs["language"], "en")
+
+    @patch("api.server.transcribe_audio")
+    def test_transcribe_rejects_non_english_request(self, mock_transcribe):
+        response = self.client.post(
+            "/v1/transcribe?language=hi",
+            files={"file": ("hindi.wav", b"test-audio", "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Only English", response.json()["detail"])
+        mock_transcribe.assert_not_called()
+
+    @patch("api.server.transcribe_audio")
+    def test_transcribe_rejects_non_english_provider_detection(self, mock_transcribe):
+        mock_transcribe.return_value = {
+            "text": "नमस्ते",
+            "language": "hi",
+            "model": "whisper-large-v3-turbo",
+        }
+
+        response = self.client.post(
+            "/v1/transcribe",
+            files={"file": ("recording.wav", b"test-audio", "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Only English", response.json()["detail"])
+
+    @patch("api.server.transcribe_audio")
+    def test_transcribe_rejects_silence(self, mock_transcribe):
+        silent_wav = io.BytesIO()
+        with wave.open(silent_wav, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(16000)
+            wav_file.writeframes(b"\x00\x00" * 16000)
+        silent_wav.seek(0)
+
+        from generation.llm_client import NoSpeechDetectedError
+
+        mock_transcribe.side_effect = NoSpeechDetectedError(
+            "No speech detected. Please try speaking and record again."
+        )
+        response = self.client.post(
+            "/v1/transcribe",
+            files={"file": ("silent.wav", silent_wav.read(), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("No speech detected", response.json()["detail"])
 
 
 class TestRephraserAgent(unittest.TestCase):

@@ -164,10 +164,11 @@ curl -X POST http://localhost:8000/v1/query \
 ```
 
 Speech-to-text is configured with `STT_ENABLED`, `STT_BACKEND`, `GROQ_STT_MODEL`,
-`STT_MAX_FILE_SIZE_BYTES`, and the optional `STT_DEFAULT_LANGUAGE` environment variables.
-The default model is Groq's multilingual `whisper-large-v3-turbo`. The endpoint accepts
-`webm`, `wav`, `mp3`, `m4a`, `ogg`, `flac`, and `mp4` recordings and enforces the configured
-file-size limit before forwarding audio to the provider. Microphone capture still requires
+`STT_MAX_FILE_SIZE_BYTES`, and `STT_DEFAULT_LANGUAGE` environment variables. English (`en`)
+is currently the only supported language; non-English requests and provider detections are
+rejected. The default model is Groq's multilingual `whisper-large-v3-turbo`, constrained here
+to English. The endpoint accepts `webm`, `wav`, `mp3`, `m4a`, `ogg`, `flac`, and `mp4` recordings
+and enforces the configured file-size limit before forwarding audio to the provider. Microphone capture still requires
 the user to grant browser permission and the frontend must run on HTTPS or localhost.
 
 Example response fields:

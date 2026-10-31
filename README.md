@@ -43,6 +43,7 @@ Documents → parse and normalize → hierarchical chunks → embeddings
 - Five guardrail layers covering input, conversational routing, document-content sanitization, retrieval confidence, and output filtering.
 - Redis-backed 24-hour conversation memory for explicitly named sessions.
 - FastAPI JSON and Server-Sent Events query endpoints.
+- Optional speech-to-text query input through browser microphone recordings and Groq Whisper transcription.
 - Document inventory, upload, delete, health, cache diagnostics, model listing/configuration, and memory-clear endpoints.
 - Local evaluation metrics for faithfulness, answer relevance, context precision, and context recall.
 - Confidence-threshold calibration utility.
@@ -146,6 +147,7 @@ All API routes are under `/v1`.
 | `GET /v1/cache/stats` | Redis operational counters and memory information. Protect this endpoint before deployment. |
 | `POST /v1/query` | JSON query with answer, citations, confidence, and telemetry. |
 | `POST /v1/query/stream` | SSE query stream with telemetry, tokens, citations, and completion events. |
+| `POST /v1/transcribe` | Transcribes a short browser audio recording into query text. |
 | `GET /v1/documents` | Lists files present in `data/raw/` and their indexed chunk counts. |
 | `POST /v1/documents/upload` | Saves an uploaded file and runs incremental ingestion. |
 | `DELETE /v1/documents/{filename}` | Removes a raw document and its indexed chunks. |
@@ -160,6 +162,13 @@ curl -X POST http://localhost:8000/v1/query \
   -H 'Content-Type: application/json' \
   -d '{"question":"What does this document say about onboarding?","session_id":"demo-session"}'
 ```
+
+Speech-to-text is configured with `STT_ENABLED`, `STT_BACKEND`, `GROQ_STT_MODEL`,
+`STT_MAX_FILE_SIZE_BYTES`, and the optional `STT_DEFAULT_LANGUAGE` environment variables.
+The default model is Groq's multilingual `whisper-large-v3-turbo`. The endpoint accepts
+`webm`, `wav`, `mp3`, `m4a`, `ogg`, `flac`, and `mp4` recordings and enforces the configured
+file-size limit before forwarding audio to the provider. Microphone capture still requires
+the user to grant browser permission and the frontend must run on HTTPS or localhost.
 
 Example response fields:
 

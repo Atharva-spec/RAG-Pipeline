@@ -19,11 +19,16 @@ from config.settings import (
     AUTO_SYNC_ENABLED,
     DATA_RAW_DIR,
     GROQ_MODEL,
+    GROQ_STT_MODEL,
     GUARDRAIL_CONFIDENCE_THRESHOLD,
     LLM_BACKEND,
     LLM_MODEL,
     LLM_TEMPERATURE,
     RERANK_TOP_N,
+    STT_BACKEND,
+    STT_DEFAULT_LANGUAGE,
+    STT_ENABLED,
+    STT_MAX_FILE_SIZE_BYTES,
     TOP_K,
 )
 from core.cache import (
@@ -40,7 +45,7 @@ from generation.guardrails import (
     validate_output_safety,
     validate_retrieval_confidence,
 )
-from generation.llm_client import get_answer, stream_answer
+from generation.llm_client import get_answer, stream_answer, transcribe_audio
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
@@ -123,6 +128,13 @@ class QueryResponse(BaseModel):
     refusal: bool = False
 
 
+class TranscriptionResponse(BaseModel):
+    text: str
+    language: Optional[str] = None
+    model: str
+    latency_ms: float
+
+
 class DocumentItem(BaseModel):
     id: str
     filename: str
@@ -177,6 +189,12 @@ def get_health_status():
         },
         "redis_cache": redis_stats,
         "automatic_sync": folder_auto_sync.status(),
+        "speech_to_text": {
+            "enabled": STT_ENABLED,
+            "backend": STT_BACKEND,
+            "model": GROQ_STT_MODEL,
+            "max_file_size_bytes": STT_MAX_FILE_SIZE_BYTES,
+        },
         "timestamp": time.time(),
     }
 
@@ -192,6 +210,57 @@ def get_cache_diagnostics():
 # =========================================================================
 # Query & Streaming Endpoints
 # =========================================================================
+
+@app.post("/v1/transcribe", response_model=TranscriptionResponse)
+async def transcribe_query_audio(
+    file: UploadFile = File(...),
+    language: Optional[str] = None,
+):
+    """Transcribe a browser recording for use as a RAG query."""
+    if not STT_ENABLED:
+        raise HTTPException(status_code=503, detail="Speech-to-text is disabled.")
+
+    filename = os.path.basename(file.filename or "recording.webm")
+    extension = os.path.splitext(filename)[1].lower()
+    supported_audio_extensions = {
+        ".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"
+    }
+    if extension not in supported_audio_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported audio type. Use webm, wav, mp3, m4a, ogg, flac, or mp4.",
+        )
+
+    audio_bytes = await file.read(STT_MAX_FILE_SIZE_BYTES + 1)
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Audio recording is empty.")
+    if len(audio_bytes) > STT_MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio recording exceeds the {STT_MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB limit.",
+        )
+
+    started_at = time.time()
+    try:
+        result = transcribe_audio(
+            audio_bytes,
+            filename,
+            content_type=file.content_type,
+            language=language or STT_DEFAULT_LANGUAGE or None,
+        )
+    except ValueError as exc:
+        logger.error("Speech-to-text configuration error: %s", exc)
+        raise HTTPException(status_code=503, detail="Speech-to-text is not configured.") from exc
+    except Exception as exc:
+        logger.error("Speech-to-text request failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=502, detail="Speech-to-text provider failed.") from exc
+
+    return TranscriptionResponse(
+        text=result["text"],
+        language=result.get("language"),
+        model=result["model"],
+        latency_ms=round((time.time() - started_at) * 1000, 2),
+    )
 
 @app.post("/v1/query", response_model=QueryResponse)
 def execute_query(payload: QueryRequest):

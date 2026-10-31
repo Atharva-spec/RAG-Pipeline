@@ -5,9 +5,11 @@ from typing import Any, Optional
 from config.settings import (
     GROQ_API_KEY,
     GROQ_MODEL,
+    GROQ_STT_MODEL,
     LLM_BACKEND,
     LLM_MODEL,
     LLM_TEMPERATURE,
+    STT_BACKEND,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,39 @@ def _stream_groq(
     for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
+
+
+def transcribe_audio(
+    audio_bytes: bytes,
+    filename: str,
+    content_type: Optional[str] = None,
+    language: Optional[str] = None,
+) -> dict[str, Any]:
+    """Transcribe a short user recording through the configured STT backend."""
+    if STT_BACKEND != "groq":
+        raise ValueError(f"Unsupported speech-to-text backend: {STT_BACKEND}")
+
+    client = _get_groq_client()
+    if not client:
+        raise ValueError(
+            "GROQ_API_KEY is not set or invalid. Please configure GROQ_API_KEY in your .env file."
+        )
+
+    kwargs: dict[str, Any] = {
+        "file": (filename, audio_bytes, content_type or "application/octet-stream"),
+        "model": GROQ_STT_MODEL,
+        "response_format": "json",
+        "temperature": 0.0,
+    }
+    if language:
+        kwargs["language"] = language
+
+    result = client.audio.transcriptions.create(**kwargs)
+    return {
+        "text": (getattr(result, "text", "") or "").strip(),
+        "language": getattr(result, "language", None),
+        "model": GROQ_STT_MODEL,
+    }
 
 
 def get_answer(

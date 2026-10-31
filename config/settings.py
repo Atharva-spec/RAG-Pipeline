@@ -25,6 +25,11 @@ logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 LLM_BACKEND = os.getenv("LLM_BACKEND", "groq").lower()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+STT_ENABLED = os.getenv("STT_ENABLED", "true").lower() in ("true", "1", "yes")
+STT_BACKEND = os.getenv("STT_BACKEND", "groq").lower()
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
+STT_MAX_FILE_SIZE_BYTES = int(os.getenv("STT_MAX_FILE_SIZE_BYTES", str(25 * 1024 * 1024)))
+STT_DEFAULT_LANGUAGE = os.getenv("STT_DEFAULT_LANGUAGE", "")
 LLM_MODEL = os.getenv("LLM_MODEL", GROQ_MODEL)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
@@ -101,5 +106,11 @@ API_PORT = int(os.getenv("API_PORT", "8000"))
 DATA_RAW_DIR = os.getenv("DATA_RAW_DIR", str(BASE_DIR / "data" / "raw"))
 DATA_PROCESSED_DIR = os.getenv("DATA_PROCESSED_DIR", str(BASE_DIR / "data" / "processed"))
 DATA_CHUNKS_DIR = os.getenv("DATA_CHUNKS_DIR", str(BASE_DIR / "data" / "chunks"))
+
+# Automatic folder synchronization. The API and CLI query paths perform a
+# change-aware catch-up before retrieval, while the API also runs a daemon
+# watcher so newly dropped documents become searchable without a manual ingest.
+AUTO_SYNC_ENABLED = os.getenv("AUTO_SYNC_ENABLED", "true").lower() in ("true", "1", "yes")
+AUTO_SYNC_INTERVAL_SECONDS = float(os.getenv("AUTO_SYNC_INTERVAL_SECONDS", "2.0"))
 
 

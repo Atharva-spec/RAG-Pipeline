@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import time
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -15,13 +16,19 @@ from pydantic import BaseModel, Field
 from config.settings import (
     API_HOST,
     API_PORT,
+    AUTO_SYNC_ENABLED,
     DATA_RAW_DIR,
     GROQ_MODEL,
+    GROQ_STT_MODEL,
     GUARDRAIL_CONFIDENCE_THRESHOLD,
     LLM_BACKEND,
     LLM_MODEL,
     LLM_TEMPERATURE,
     RERANK_TOP_N,
+    STT_BACKEND,
+    STT_DEFAULT_LANGUAGE,
+    STT_ENABLED,
+    STT_MAX_FILE_SIZE_BYTES,
     TOP_K,
 )
 from core.cache import (
@@ -38,13 +45,13 @@ from generation.guardrails import (
     validate_output_safety,
     validate_retrieval_confidence,
 )
-from generation.llm_client import get_answer, stream_answer
+from generation.llm_client import get_answer, stream_answer, transcribe_audio
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.query_condenser import condense_query
 from generation.rephraser_agent import rephrase_query
-from ingestion.incremental_ingest import sync_incremental
 from ingestion.document_loader import SUPPORTED_EXTENSIONS
+from ingestion.auto_sync import folder_auto_sync
 from retrieval.health_check import check_llm, check_postgres
 from retrieval.reranker import rerank_chunks
 from retrieval.retriever import retrieve_chunks
@@ -52,10 +59,23 @@ from retrieval.vector_store import get_connection
 
 logger = logging.getLogger("rag_api")
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Run automatic raw-folder synchronization while the API is alive."""
+    if AUTO_SYNC_ENABLED:
+        folder_auto_sync.start()
+    try:
+        yield
+    finally:
+        if AUTO_SYNC_ENABLED:
+            folder_auto_sync.stop()
+
 app = FastAPI(
     title="Enterprise Conversational RAG Knowledge Engine API",
     description="High-performance REST & SSE Token Streaming API with PostgreSQL pgvector and Redis Caching",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for Next.js, Stitch previews, and mobile apps
@@ -106,6 +126,13 @@ class QueryResponse(BaseModel):
     telemetry: TelemetryData
     cached: bool = False
     refusal: bool = False
+
+
+class TranscriptionResponse(BaseModel):
+    text: str
+    language: Optional[str] = None
+    model: str
+    latency_ms: float
 
 
 class DocumentItem(BaseModel):
@@ -161,6 +188,13 @@ def get_health_status():
             "model": _runtime_config.model,
         },
         "redis_cache": redis_stats,
+        "automatic_sync": folder_auto_sync.status(),
+        "speech_to_text": {
+            "enabled": STT_ENABLED,
+            "backend": STT_BACKEND,
+            "model": GROQ_STT_MODEL,
+            "max_file_size_bytes": STT_MAX_FILE_SIZE_BYTES,
+        },
         "timestamp": time.time(),
     }
 
@@ -176,6 +210,57 @@ def get_cache_diagnostics():
 # =========================================================================
 # Query & Streaming Endpoints
 # =========================================================================
+
+@app.post("/v1/transcribe", response_model=TranscriptionResponse)
+async def transcribe_query_audio(
+    file: UploadFile = File(...),
+    language: Optional[str] = None,
+):
+    """Transcribe a browser recording for use as a RAG query."""
+    if not STT_ENABLED:
+        raise HTTPException(status_code=503, detail="Speech-to-text is disabled.")
+
+    filename = os.path.basename(file.filename or "recording.webm")
+    extension = os.path.splitext(filename)[1].lower()
+    supported_audio_extensions = {
+        ".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".wav", ".webm"
+    }
+    if extension not in supported_audio_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported audio type. Use webm, wav, mp3, m4a, ogg, flac, or mp4.",
+        )
+
+    audio_bytes = await file.read(STT_MAX_FILE_SIZE_BYTES + 1)
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Audio recording is empty.")
+    if len(audio_bytes) > STT_MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio recording exceeds the {STT_MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB limit.",
+        )
+
+    started_at = time.time()
+    try:
+        result = transcribe_audio(
+            audio_bytes,
+            filename,
+            content_type=file.content_type,
+            language=language or STT_DEFAULT_LANGUAGE or None,
+        )
+    except ValueError as exc:
+        logger.error("Speech-to-text configuration error: %s", exc)
+        raise HTTPException(status_code=503, detail="Speech-to-text is not configured.") from exc
+    except Exception as exc:
+        logger.error("Speech-to-text request failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=502, detail="Speech-to-text provider failed.") from exc
+
+    return TranscriptionResponse(
+        text=result["text"],
+        language=result.get("language"),
+        model=result["model"],
+        latency_ms=round((time.time() - started_at) * 1000, 2),
+    )
 
 @app.post("/v1/query", response_model=QueryResponse)
 def execute_query(payload: QueryRequest):
@@ -228,6 +313,10 @@ def execute_query(payload: QueryRequest):
             ),
             refusal=False,
         )
+
+    # Catch up synchronously if a document was dropped immediately before the
+    # query. The background watcher handles normal changes between requests.
+    folder_auto_sync.ensure_latest()
 
     # 3. Rephraser Agent (Query reformulation, typo repair & context resolution)
     memory = ConversationMemory(session_id=session_id)
@@ -369,6 +458,10 @@ def execute_query_stream(payload: QueryRequest):
             yield f"data: {json.dumps({'event': 'token', 'content': intent_reply})}\n\n"
             yield f"data: {json.dumps({'event': 'done', 'refusal': False})}\n\n"
             return
+
+        # Ensure a file added just before an SSE request is searchable now;
+        # the background watcher covers later changes.
+        folder_auto_sync.ensure_latest()
 
         # 3. Rephraser Agent & Retrieval
         memory = ConversationMemory(session_id=session_id)
@@ -538,7 +631,7 @@ async def upload_document(file: UploadFile = File(...)):
 
     # Trigger smart incremental sync
     try:
-        sync_res = sync_incremental(DATA_RAW_DIR, verbose=True)
+        sync_res = folder_auto_sync.sync_now()
         chunks_added = sync_res.get("chunks_added", 0)
     except Exception as e:
         logger.error(f"Error during document indexing: {e}", exc_info=True)

@@ -14,6 +14,7 @@ from generation.llm_client import get_answer
 from generation.memory import ConversationMemory
 from generation.prompt_builder import build_prompt
 from generation.rephraser_agent import rephrase_query
+from ingestion.auto_sync import folder_auto_sync
 from retrieval.health_check import run_preflight_check
 from retrieval.reranker import rerank_chunks
 from retrieval.retriever import retrieve_chunks
@@ -68,6 +69,10 @@ def query(
             memory.add_turn(question, intent_reply)
         print(f"\nAnswer:\n{intent_reply}\n")
         return intent_reply
+
+    # Automatically pick up files added to data/raw without requiring a
+    # separate ingest command. The folder manager skips unchanged files.
+    folder_auto_sync.ensure_latest()
 
     # 3. Rephraser Agent (Query reformulation, typo repair & context resolution)
     search_query = rephrase_query(question, memory=memory)
@@ -125,6 +130,7 @@ def chat_loop():
     """
     # 1. Run Pre-flight Health Check
     run_preflight_check()
+    folder_auto_sync.start()
 
     memory = ConversationMemory(max_turns=5)
 
@@ -155,6 +161,8 @@ def chat_loop():
         except (KeyboardInterrupt, EOFError):
             print("\nSession ended.")
             break
+
+    folder_auto_sync.stop()
 
 
 if __name__ == "__main__":
